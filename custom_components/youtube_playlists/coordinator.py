@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import YouTubeApi
-from .const import DOMAIN, UPDATE_INTERVAL_MINUTES
+from .const import CONF_NOTIFY_SCRIPT, DOMAIN, UPDATE_INTERVAL_MINUTES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,10 +26,53 @@ class YouTubeCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
             config_entry=entry,
         )
         self.api = api
+        self._known_video_ids: set[str] | None = None
 
     async def _async_update_data(self) -> list[dict[str, Any]]:
         """Fetch data."""
         try:
-            return await self.api.get_data()
+            data = await self.api.get_data()
         except Exception as err:
             raise UpdateFailed(f"Unable to fetch YouTube playlists: {err}") from err
+
+        await self._notify_new_videos(data)
+        return data
+
+    async def _notify_new_videos(self, data: list[dict[str, Any]]) -> None:
+        """Run the configured script if new videos showed up since the last refresh."""
+        current_ids = {
+            video["id"] for playlist in data for video in playlist.get("videos", [])
+        }
+
+        if self._known_video_ids is None:
+            # First refresh: just establish the baseline, don't fire for existing videos.
+            self._known_video_ids = current_ids
+            return
+
+        new_ids = current_ids - self._known_video_ids
+        self._known_video_ids = current_ids
+
+        if not new_ids:
+            return
+
+        script_entity_id = self.config_entry.options.get(CONF_NOTIFY_SCRIPT)
+        if not script_entity_id:
+            return
+
+        new_videos = [
+            {"playlist_id": playlist["id"], "playlist_title": playlist["title"], **video}
+            for playlist in data
+            for video in playlist.get("videos", [])
+            if video["id"] in new_ids
+        ]
+
+        domain, object_id = script_entity_id.split(".", 1)
+        try:
+            await self.hass.services.async_call(
+                domain,
+                object_id,
+                {"variables": {"new_videos": new_videos}},
+                blocking=False,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Failed to run script %s: %s", script_entity_id, err)

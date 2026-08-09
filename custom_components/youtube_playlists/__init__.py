@@ -53,7 +53,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: YouTubeConfigEntry) -> b
         raise ConfigEntryNotReady from err
 
     entry.runtime_data = coordinator
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: YouTubeConfigEntry) -> None:
+    """Reload the entry when its options change (e.g. a different script picked)."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: YouTubeConfigEntry) -> bool:

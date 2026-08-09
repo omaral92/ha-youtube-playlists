@@ -12,6 +12,8 @@ class YouTubePlaylistCard extends HTMLElement {
     this.config = {
       columns: 3,
       show_playlist_title: true,
+      show_titles: true,
+      video_titles: {},
       ...config,
     };
     this._render();
@@ -45,6 +47,11 @@ class YouTubePlaylistCard extends HTMLElement {
     }
     return playlist.id === this.config.playlist ||
            playlist.title === this.config.playlist;
+  }
+
+  _displayTitle(video) {
+    const overrides = this.config.video_titles || {};
+    return overrides[video.id] ?? overrides[video.title] ?? video.title;
   }
 
   _escape(value) {
@@ -96,10 +103,16 @@ class YouTubePlaylistCard extends HTMLElement {
           background: var(--secondary-background-color);
         }
         .title {
-          display:block;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
           padding: 9px;
           line-height: 1.25;
           font-size: .95rem;
+        }
+        .video.no-title .thumb {
+          border-radius: 12px;
         }
         @media (max-width: 600px) {
           .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -132,10 +145,12 @@ class YouTubePlaylistCard extends HTMLElement {
       html += `<div class="grid">`;
 
       for (const video of playlist.videos || []) {
+        const displayTitle = this._displayTitle(video);
+        const showTitle = this.config.show_titles;
         html += `
-          <button class="video" data-video-id="${this._escape(video.id)}">
+          <button class="video${showTitle ? "" : " no-title"}" data-video-id="${this._escape(video.id)}" title="${this._escape(video.title)}">
             ${video.thumbnail ? `<img class="thumb" loading="lazy" src="${this._escape(video.thumbnail)}">` : `<div class="thumb"></div>`}
-            <span class="title">${this._escape(video.title)}</span>
+            ${showTitle ? `<span class="title">${this._escape(displayTitle)}</span>` : ""}
           </button>`;
       }
       html += `</div></section>`;

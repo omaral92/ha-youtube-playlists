@@ -16,5 +16,16 @@
   },
   "application_credentials": {
     "description": "Create Google OAuth credentials at {console_url}. Use a Web application OAuth client and add the Home Assistant OAuth redirect URI shown by Home Assistant."
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "YouTube Playlists options",
+        "description": "Optionally choose a script to run whenever new videos are found in a tracked playlist.",
+        "data": {
+          "notify_script": "Script to run on new videos"
+        }
+      }
+    }
   }
 }
