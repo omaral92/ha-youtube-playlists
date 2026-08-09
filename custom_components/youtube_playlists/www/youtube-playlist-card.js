@@ -88,43 +88,27 @@ class YouTubePlaylistCard extends HTMLElement {
         }
         summary {
           cursor: pointer;
-          padding: 12px 14px;
-          font-size: 1.05rem;
+          padding: 0;
+          font-size: 1rem;
           font-weight: 600;
           list-style: none;
           outline: none;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 0.75rem;
+          display: block;
           background: var(--card-background-color);
-          border-bottom: 1px solid rgba(0, 0, 0, 0.08);
           min-height: 56px;
         }
         summary::-webkit-details-marker {
           display: none;
         }
-        details[open] summary::after {
-          transform: rotate(180deg);
-        }
-        summary::after {
-          content: "▾";
-          margin-left: auto;
-          transition: transform .2s ease;
-        }
-        .summary-left {
-          display: inline-flex;
+        summary .bubble-container {
+          display: flex;
           align-items: center;
           gap: 0.75rem;
           width: 100%;
+          min-height: 56px;
+          padding: 12px 14px;
         }
-        .summary-title {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          flex: 1;
-        }
-        .playlist-icon {
+        summary .bubble-icon {
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -132,7 +116,37 @@ class YouTubePlaylistCard extends HTMLElement {
           height: 34px;
           border-radius: 50%;
           background: rgba(0, 0, 0, 0.08);
+          color: var(--primary-text-color);
           font-size: 1rem;
+          flex-shrink: 0;
+        }
+        summary .bubble-name {
+          margin: 0;
+          font-size: 1rem;
+          font-weight: 600;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        summary .bubble-line {
+          flex-grow: 1;
+          height: 6px;
+          border-radius: 6px;
+          margin-inline-end: 14px;
+          background-color: var(--bubble-line-background-color, var(--secondary-background-color));
+          opacity: 0.6;
+        }
+        summary .bubble-toggle {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          color: var(--secondary-text-color);
+          transition: transform .2s ease;
+        }
+        details[open] summary .bubble-toggle {
+          transform: rotate(180deg);
         }
         .playlist-title {
           font-size: 1.15rem;
@@ -204,7 +218,7 @@ class YouTubePlaylistCard extends HTMLElement {
       if (collapsible) {
         const playlistTitle = this._escape(this._playlistTitle(playlist));
         const firstChar = playlistTitle.slice(0, 1);
-        html += `<details class="playlist" open><summary><span class="summary-left"><span class="playlist-icon">${firstChar}</span><span class="summary-title">${playlistTitle}</span></span></summary><div class="grid">`;
+        html += `<details class="playlist" open><summary><span class="bubble-container"><span class="bubble-icon">${firstChar}</span><span class="bubble-name">${playlistTitle}</span><span class="bubble-line"></span><span class="bubble-toggle">▾</span></span></summary><div class="grid">`;
       } else {
         html += `<section class="playlist">`;
         if (this.config.show_playlist_title) {
