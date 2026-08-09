@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "pick_implementation": {
+        "title": "YouTube"
+      },
+      "auth": {
+        "title": "Connect YouTube"
+      }
+    },
+    "abort": {
+      "oauth2_failed": "YouTube authorization failed.",
+      "oauth2_unauthorized": "YouTube authorization was rejected.",
+      "missing_credentials": "Add Google OAuth credentials first."
+    }
+  },
+  "application_credentials": {
+    "description": "Create Google OAuth credentials at {console_url}. Use a Web application OAuth client and add the Home Assistant OAuth redirect URI shown by Home Assistant."
+  }
+}
