@@ -26,7 +26,6 @@ from .const import (
     CONF_PLAY_MEDIA_PLAYER,
     CONF_PLAY_SCRIPT,
     CONF_PLAY_TARGET_MODE,
-    DEFAULT_PLAY_SCRIPT_ENTITY_ID,
     DOMAIN,
     PLAY_TARGET_MEDIA_PLAYER,
     PLAY_TARGET_SCRIPT,
@@ -108,9 +107,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: YouTubeConfigEntry) -> b
             )
             return
 
-        script_entity_id = entry.options.get(
-            CONF_PLAY_SCRIPT, DEFAULT_PLAY_SCRIPT_ENTITY_ID
-        )
+        script_entity_id = entry.options.get(CONF_PLAY_SCRIPT)
+        if not script_entity_id:
+            _LOGGER.error(
+                "No script configured for YouTube Playlists playback. "
+                "Set one under Settings > Devices & Services > YouTube Playlists > Configure."
+            )
+            return
+
         domain, object_id = script_entity_id.split(".", 1)
         await hass.services.async_call(
             domain, object_id, {"video_id": video_id}, blocking=False

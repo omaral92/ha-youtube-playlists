@@ -1,4 +1,4 @@
-"""Logic for playing a YouTube video on a media_player target."""
+"""Logic for playing a YouTube video on an Android TV media_player target."""
 from __future__ import annotations
 
 import asyncio

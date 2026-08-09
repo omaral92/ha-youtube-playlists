@@ -15,7 +15,6 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.config_entry_oauth2_flow import AbstractOAuth2FlowHandler
 
 from .const import (
-    CONF_NOTIFY_SCRIPT,
     CONF_PLAY_MEDIA_PLAYER,
     CONF_PLAY_SCRIPT,
     CONF_PLAY_TARGET_MODE,
@@ -62,38 +61,34 @@ class YouTubePlaylistsConfigFlow(
 class YouTubePlaylistsOptionsFlow(OptionsFlow):
     """Handle YouTube Playlists options."""
 
+    def __init__(self) -> None:
+        self._data: dict = {}
+
     async def async_step_init(
         self, user_input: dict | None = None
     ) -> ConfigFlowResult:
-        """Options: which playlists to import, how to play videos, new-video script."""
+        """Step 1: which playlists to import, and how videos should play."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
             if (
-                user_input.get(CONF_PLAYLIST_FILTER_MODE) == FILTER_MODE_PATTERN
+                user_input[CONF_PLAYLIST_FILTER_MODE] == FILTER_MODE_PATTERN
                 and not user_input.get(CONF_PLAYLIST_PATTERN, "").strip()
             ):
                 errors["playlist_pattern"] = "pattern_required"
-            elif (
-                user_input.get(CONF_PLAY_TARGET_MODE) == PLAY_TARGET_MEDIA_PLAYER
-                and not user_input.get(CONF_PLAY_MEDIA_PLAYER)
-            ):
-                errors["play_media_player"] = "media_player_required"
             else:
-                return self.async_create_entry(data=user_input)
+                self._data.update(user_input)
+                if self._data[CONF_PLAY_TARGET_MODE] == PLAY_TARGET_MEDIA_PLAYER:
+                    return await self.async_step_media_player()
+                return await self.async_step_script()
 
         current = {
             CONF_PLAYLIST_FILTER_MODE: FILTER_MODE_ALL,
             CONF_PLAYLIST_PATTERN: DEFAULT_PLAYLIST_PATTERN,
             CONF_PLAY_TARGET_MODE: PLAY_TARGET_SCRIPT,
-            CONF_PLAY_MEDIA_PLAYER: None,
-            CONF_PLAY_SCRIPT: None,
-            CONF_PLAY_VOLUME: DEFAULT_PLAY_VOLUME_PERCENT,
-            CONF_NOTIFY_SCRIPT: None,
         }
         current.update(self.config_entry.options)
         if user_input is not None:
-            # Repopulate the form with what was just submitted, on validation error.
             current.update(user_input)
 
         schema = vol.Schema(
@@ -125,18 +120,89 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                     selector.SelectSelectorConfig(
                         options=[
                             selector.SelectOptionDict(
-                                value=PLAY_TARGET_SCRIPT, label="Run a script"
+                                value=PLAY_TARGET_SCRIPT,
+                                label="Run a script when a video is clicked",
                             ),
                             selector.SelectOptionDict(
                                 value=PLAY_TARGET_MEDIA_PLAYER,
-                                label="Play directly on a media player (Android TV / Fire TV)",
+                                label="Play directly on a media player entity",
                             ),
                         ],
                         mode=selector.SelectSelectorMode.LIST,
                         translation_key="play_target_mode",
                     )
                 ),
-                vol.Optional(
+            }
+        )
+
+        return self.async_show_form(
+            step_id="init", data_schema=schema, errors=errors
+        )
+
+    async def async_step_script(
+        self, user_input: dict | None = None
+    ) -> ConfigFlowResult:
+        """Step 2a: pick the script to run (script mode only)."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            if not user_input.get(CONF_PLAY_SCRIPT):
+                errors["play_script"] = "script_required"
+            else:
+                self._data.update(user_input)
+                self._data.pop(CONF_PLAY_MEDIA_PLAYER, None)
+                self._data.pop(CONF_PLAY_VOLUME, None)
+                return self.async_create_entry(data=self._data)
+
+        current_script = self.config_entry.options.get(CONF_PLAY_SCRIPT)
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_PLAY_SCRIPT, default=current_script
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="script")
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="script", data_schema=schema, errors=errors
+        )
+
+    async def async_step_media_player(
+        self, user_input: dict | None = None
+    ) -> ConfigFlowResult:
+        """Step 2b: pick the media player and volume (media player mode only).
+
+        Only Android TV entities are supported, since playback is
+        launched via an ADB intent (requires the Android TV integration with
+        ADB debugging enabled on the device).
+        """
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            if not user_input.get(CONF_PLAY_MEDIA_PLAYER):
+                errors["play_media_player"] = "media_player_required"
+            else:
+                self._data.update(user_input)
+                self._data.pop(CONF_PLAY_SCRIPT, None)
+                return self.async_create_entry(data=self._data)
+
+        current = {
+            CONF_PLAY_MEDIA_PLAYER: self.config_entry.options.get(
+                CONF_PLAY_MEDIA_PLAYER
+            ),
+            CONF_PLAY_VOLUME: self.config_entry.options.get(
+                CONF_PLAY_VOLUME, DEFAULT_PLAY_VOLUME_PERCENT
+            ),
+        }
+        if user_input is not None:
+            current.update(user_input)
+
+        schema = vol.Schema(
+            {
+                vol.Required(
                     CONF_PLAY_MEDIA_PLAYER, default=current[CONF_PLAY_MEDIA_PLAYER]
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="media_player")
@@ -152,19 +218,9 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                         unit_of_measurement="%",
                     )
                 ),
-                vol.Optional(
-                    CONF_PLAY_SCRIPT, default=current[CONF_PLAY_SCRIPT]
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="script")
-                ),
-                vol.Optional(
-                    CONF_NOTIFY_SCRIPT, default=current[CONF_NOTIFY_SCRIPT]
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="script")
-                ),
             }
         )
 
         return self.async_show_form(
-            step_id="init", data_schema=schema, errors=errors
+            step_id="media_player", data_schema=schema, errors=errors
         )

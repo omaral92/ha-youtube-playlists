@@ -20,22 +20,34 @@
   "options": {
     "step": {
       "init": {
-        "title": "YouTube Playlists options",
-        "description": "Choose which playlists to import and how clicking a video should play it.",
+        "title": "YouTube Playlists",
+        "description": "Choose which playlists to import, and how clicking a video should play it.",
         "data": {
           "playlist_filter_mode": "Playlists to import",
           "playlist_pattern": "Pattern (e.g. HA* for a prefix, *Podcast* to match anywhere)",
-          "play_target_mode": "How to play videos",
-          "play_media_player": "Media player (Android TV / Fire TV)",
-          "play_volume": "Volume to set before playing",
-          "play_script": "Script to run instead (overrides default script name)",
-          "notify_script": "Script to run when new videos are found"
+          "play_target_mode": "How to play videos"
+        }
+      },
+      "script": {
+        "title": "Script playback",
+        "description": "This script is called with a video_id when a video is clicked.",
+        "data": {
+          "play_script": "Script to run"
+        }
+      },
+      "media_player": {
+        "title": "Media player playback",
+        "description": "Only works with Android TV entities set up via the Android TV (ADB) integration, with ADB debugging enabled on the device. The TV will be turned on and given time to wake up if it's off, volume will be set, then the video will launch automatically.",
+        "data": {
+          "play_media_player": "Media player (Android TV only)",
+          "play_volume": "Volume to set before playing"
         }
       }
     },
     "error": {
       "pattern_required": "Enter a pattern, or switch back to \"All playlists\".",
-      "media_player_required": "Choose a media player, or switch back to \"Run a script\"."
+      "media_player_required": "Choose a media player.",
+      "script_required": "Choose a script."
     }
   },
   "selector": {
@@ -47,8 +59,8 @@
     },
     "play_target_mode": {
       "options": {
-        "script": "Run a script",
-        "media_player": "Play directly on a media player (Android TV / Fire TV)"
+        "script": "Run a script when a video is clicked",
+        "media_player": "Play directly on a media player entity"
       }
     }
   }

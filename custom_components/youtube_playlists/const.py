@@ -9,7 +9,6 @@ PLATFORMS: list[Platform] = []
 WS_TYPE = "youtube_playlists/get_data"
 
 # Options
-CONF_NOTIFY_SCRIPT = "notify_script"
 CONF_PLAYLIST_FILTER_MODE = "playlist_filter_mode"
 CONF_PLAYLIST_PATTERN = "playlist_pattern"
 CONF_PLAY_TARGET_MODE = "play_target_mode"
@@ -23,7 +22,6 @@ DEFAULT_PLAYLIST_PATTERN = "HA*"
 
 PLAY_TARGET_SCRIPT = "script"
 PLAY_TARGET_MEDIA_PLAYER = "media_player"
-DEFAULT_PLAY_SCRIPT_ENTITY_ID = "script.function_play_youtube_video"
 DEFAULT_PLAY_VOLUME_PERCENT = 30
 
 # How long to wait for a TV to report "on" after turning it on, and how
