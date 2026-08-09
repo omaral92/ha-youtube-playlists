@@ -119,8 +119,10 @@ columns: 3
 |---|---|---|
 | `columns` | `3` | Grid columns |
 | `show_playlist_title` | `true` | Show/hide each playlist's heading |
+| `collapsible_playlists` | `false` | Make each playlist collapsible using a summary/expand panel |
 | `show_titles` | `true` | Show/hide video titles under thumbnails |
 | `video_titles` | `{}` | Override specific video titles — see below |
+| `playlist_titles` | `{}` | Override playlist names, including emoji |
 | `playlist` | *(all)* | Restrict the card to specific playlists, by ID or exact title |
 
 ### Selecting playlists
@@ -133,6 +135,18 @@ playlist:
 columns: 3
 ```
 
+### Custom playlist names
+
+Override the playlist heading text with `playlist_titles:`. This works by playlist ID or by exact original playlist title, and it can include emoji.
+
+```yaml
+type: custom:youtube-playlist-card
+playlist_titles:
+  PLxxxxxxxxxxxxxxxx: "📿 Quran"
+  "HA Music": "🎶 My Favorites"
+columns: 3
+```
+
 ### Custom titles / hiding long titles
 
 Long YouTube titles are clamped to 2 lines with a "…" by default, and the
@@ -142,6 +156,12 @@ titles entirely, or override specific ones:
 ```yaml
 type: custom:youtube-playlist-card
 show_titles: false        # hide all titles
+```
+
+```yaml
+type: custom:youtube-playlist-card
+collapsible_playlists: true
+columns: 3
 ```
 
 ```yaml

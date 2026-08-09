@@ -13,6 +13,7 @@ class YouTubePlaylistCard extends HTMLElement {
       columns: 3,
       show_playlist_title: true,
       show_titles: true,
+      collapsible_playlists: false,
       video_titles: {},
       ...config,
     };
@@ -54,6 +55,11 @@ class YouTubePlaylistCard extends HTMLElement {
     return overrides[video.id] ?? overrides[video.title] ?? video.title;
   }
 
+  _playlistTitle(playlist) {
+    const overrides = this.config.playlist_titles || {};
+    return overrides[playlist.id] ?? overrides[playlist.title] ?? playlist.title;
+  }
+
   _escape(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -73,6 +79,32 @@ class YouTubePlaylistCard extends HTMLElement {
         .playlist {
           margin-bottom: 18px;
         }
+        details.playlist {
+          border-radius: 12px;
+          border: 1px solid rgba(0,0,0,.08);
+          overflow: hidden;
+          margin-bottom: 18px;
+          background: var(--ha-card-background, var(--card-background-color));
+        }
+        summary {
+          cursor: pointer;
+          padding: 12px 14px;
+          font-size: 1.05rem;
+          font-weight: 600;
+          list-style: none;
+          outline: none;
+        }
+        summary::-webkit-details-marker {
+          display: none;
+        }
+        details[open] summary::after {
+          transform: rotate(180deg);
+        }
+        summary::after {
+          content: "▾";
+          float: right;
+          transition: transform .2s ease;
+        }
         .playlist-title {
           font-size: 1.15rem;
           font-weight: 600;
@@ -82,6 +114,7 @@ class YouTubePlaylistCard extends HTMLElement {
           display: grid;
           grid-template-columns: repeat(${Number(this.config.columns) || 3}, minmax(0, 1fr));
           gap: 10px;
+          padding: 0;
         }
         .video {
           cursor: pointer;
@@ -136,13 +169,18 @@ class YouTubePlaylistCard extends HTMLElement {
       return;
     }
 
+    const collapsible = Boolean(this.config.collapsible_playlists);
     let html = style + `<div class="wrap">`;
     for (const playlist of playlists) {
-      html += `<section class="playlist">`;
-      if (this.config.show_playlist_title) {
-        html += `<div class="playlist-title">${this._escape(playlist.title)}</div>`;
+      if (collapsible) {
+        html += `<details class="playlist" open><summary>${this._escape(this._playlistTitle(playlist))}</summary><div class="grid">`;
+      } else {
+        html += `<section class="playlist">`;
+        if (this.config.show_playlist_title) {
+          html += `<div class="playlist-title">${this._escape(this._playlistTitle(playlist))}</div>`;
+        }
+        html += `<div class="grid">`;
       }
-      html += `<div class="grid">`;
 
       for (const video of playlist.videos || []) {
         const displayTitle = this._displayTitle(video);
@@ -153,7 +191,9 @@ class YouTubePlaylistCard extends HTMLElement {
             ${showTitle ? `<span class="title">${this._escape(displayTitle)}</span>` : ""}
           </button>`;
       }
-      html += `</div></section>`;
+
+      html += `</div>`;
+      html += collapsible ? `</details>` : `</section>`;
     }
     html += `</div>`;
 
