@@ -42,6 +42,7 @@ type YouTubeConfigEntry = ConfigEntry[YouTubeCoordinator]
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up the integration."""
+    add_extra_js_url(hass, "/youtube_playlists/youtube-playlist-card.js")
     async_register_websocket(hass)
     await _async_register_frontend_card(hass)
     return True
