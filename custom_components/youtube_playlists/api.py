@@ -1,9 +1,12 @@
 """YouTube Data API client."""
 from __future__ import annotations
 
+import fnmatch
 from typing import Any
 
 from homeassistant.helpers.config_entry_oauth2_flow import OAuth2Session
+
+from .const import FILTER_MODE_ALL
 
 BASE_URL = "https://www.googleapis.com/youtube/v3"
 
@@ -24,10 +27,18 @@ class YouTubeApi:
         response.raise_for_status()
         return await response.json()
 
-    async def get_ha_playlists(self) -> list[dict[str, Any]]:
-        """Return all playlists whose title starts with HA."""
+    async def get_playlists(
+        self, filter_mode: str = FILTER_MODE_ALL, pattern: str = ""
+    ) -> list[dict[str, Any]]:
+        """Return playlists, optionally filtered by a glob-style title pattern.
+
+        filter_mode "all" returns every playlist owned by the account.
+        filter_mode "pattern" returns only playlists whose title matches
+        `pattern` (case-insensitive, glob syntax e.g. "HA*", "*Podcast*").
+        """
         playlists: list[dict[str, Any]] = []
         page_token: str | None = None
+        pattern_lower = pattern.lower().strip()
 
         while True:
             params: dict[str, Any] = {
@@ -42,19 +53,23 @@ class YouTubeApi:
 
             for item in data.get("items", []):
                 title = item["snippet"]["title"]
-                if title.startswith("HA"):
-                    playlists.append(
-                        {
-                            "id": item["id"],
-                            "title": title,
-                            "description": item["snippet"].get("description", ""),
-                            "thumbnail": (
-                                item["snippet"].get("thumbnails", {}).get("medium", {}).get("url")
-                                or item["snippet"].get("thumbnails", {}).get("default", {}).get("url")
-                            ),
-                            "item_count": item.get("contentDetails", {}).get("itemCount", 0),
-                        }
-                    )
+
+                if filter_mode != FILTER_MODE_ALL and pattern_lower:
+                    if not fnmatch.fnmatch(title.lower(), pattern_lower):
+                        continue
+
+                playlists.append(
+                    {
+                        "id": item["id"],
+                        "title": title,
+                        "description": item["snippet"].get("description", ""),
+                        "thumbnail": (
+                            item["snippet"].get("thumbnails", {}).get("medium", {}).get("url")
+                            or item["snippet"].get("thumbnails", {}).get("default", {}).get("url")
+                        ),
+                        "item_count": item.get("contentDetails", {}).get("itemCount", 0),
+                    }
+                )
 
             page_token = data.get("nextPageToken")
             if not page_token:
@@ -106,9 +121,11 @@ class YouTubeApi:
 
         return videos
 
-    async def get_data(self) -> list[dict[str, Any]]:
+    async def get_data(
+        self, filter_mode: str = FILTER_MODE_ALL, pattern: str = ""
+    ) -> list[dict[str, Any]]:
         """Return playlists and their videos."""
-        playlists = await self.get_ha_playlists()
+        playlists = await self.get_playlists(filter_mode, pattern)
         result = []
         for playlist in playlists:
             videos = await self.get_playlist_videos(playlist["id"])

@@ -21,10 +21,23 @@
     "step": {
       "init": {
         "title": "YouTube Playlists options",
-        "description": "Optionally choose a script to run whenever new videos are found in a tracked playlist.",
+        "description": "Choose which playlists to import, and optionally a script to run whenever new videos are found.",
         "data": {
+          "playlist_filter_mode": "Playlists to import",
+          "playlist_pattern": "Pattern (e.g. HA* for a prefix, *Podcast* to match anywhere)",
           "notify_script": "Script to run on new videos"
         }
+      }
+    },
+    "error": {
+      "pattern_required": "Enter a pattern, or switch back to \"All playlists\"."
+    }
+  },
+  "selector": {
+    "playlist_filter_mode": {
+      "options": {
+        "all": "All playlists",
+        "pattern": "Match a pattern / prefix"
       }
     }
   }
