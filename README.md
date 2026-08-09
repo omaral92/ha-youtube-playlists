@@ -147,6 +147,18 @@ playlist_titles:
 columns: 3
 ```
 
+### Collapsible playlists
+
+If you want each playlist to be collapsible, enable `collapsible_playlists`.
+Each playlist is rendered as a native expand/collapse panel with its title as
+the summary row.
+
+```yaml
+type: custom:youtube-playlist-card
+collapsible_playlists: true
+columns: 3
+```
+
 ### Custom titles / hiding long titles
 
 Long YouTube titles are clamped to 2 lines with a "…" by default, and the
@@ -156,12 +168,6 @@ titles entirely, or override specific ones:
 ```yaml
 type: custom:youtube-playlist-card
 show_titles: false        # hide all titles
-```
-
-```yaml
-type: custom:youtube-playlist-card
-collapsible_playlists: true
-columns: 3
 ```
 
 ```yaml

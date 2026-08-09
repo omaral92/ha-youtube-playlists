@@ -93,6 +93,13 @@ class YouTubePlaylistCard extends HTMLElement {
           font-weight: 600;
           list-style: none;
           outline: none;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+          background: var(--card-background-color);
+          border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+          min-height: 56px;
         }
         summary::-webkit-details-marker {
           display: none;
@@ -102,8 +109,30 @@ class YouTubePlaylistCard extends HTMLElement {
         }
         summary::after {
           content: "▾";
-          float: right;
+          margin-left: auto;
           transition: transform .2s ease;
+        }
+        .summary-left {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.75rem;
+          width: 100%;
+        }
+        .summary-title {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          flex: 1;
+        }
+        .playlist-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 34px;
+          height: 34px;
+          border-radius: 50%;
+          background: rgba(0, 0, 0, 0.08);
+          font-size: 1rem;
         }
         .playlist-title {
           font-size: 1.15rem;
@@ -173,7 +202,9 @@ class YouTubePlaylistCard extends HTMLElement {
     let html = style + `<div class="wrap">`;
     for (const playlist of playlists) {
       if (collapsible) {
-        html += `<details class="playlist" open><summary>${this._escape(this._playlistTitle(playlist))}</summary><div class="grid">`;
+        const playlistTitle = this._escape(this._playlistTitle(playlist));
+        const firstChar = playlistTitle.slice(0, 1);
+        html += `<details class="playlist" open><summary><span class="summary-left"><span class="playlist-icon">${firstChar}</span><span class="summary-title">${playlistTitle}</span></span></summary><div class="grid">`;
       } else {
         html += `<section class="playlist">`;
         if (this.config.show_playlist_title) {
