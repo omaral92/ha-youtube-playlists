@@ -21,16 +21,21 @@
     "step": {
       "init": {
         "title": "YouTube Playlists options",
-        "description": "Choose which playlists to import, and optionally a script to run whenever new videos are found.",
+        "description": "Choose which playlists to import and how clicking a video should play it.",
         "data": {
           "playlist_filter_mode": "Playlists to import",
           "playlist_pattern": "Pattern (e.g. HA* for a prefix, *Podcast* to match anywhere)",
-          "notify_script": "Script to run on new videos"
+          "play_target_mode": "How to play videos",
+          "play_media_player": "Media player (Android TV / Fire TV)",
+          "play_volume": "Volume to set before playing",
+          "play_script": "Script to run instead (overrides default script name)",
+          "notify_script": "Script to run when new videos are found"
         }
       }
     },
     "error": {
-      "pattern_required": "Enter a pattern, or switch back to \"All playlists\"."
+      "pattern_required": "Enter a pattern, or switch back to \"All playlists\".",
+      "media_player_required": "Choose a media player, or switch back to \"Run a script\"."
     }
   },
   "selector": {
@@ -38,6 +43,12 @@
       "options": {
         "all": "All playlists",
         "pattern": "Match a pattern / prefix"
+      }
+    },
+    "play_target_mode": {
+      "options": {
+        "script": "Run a script",
+        "media_player": "Play directly on a media player (Android TV / Fire TV)"
       }
     }
   }

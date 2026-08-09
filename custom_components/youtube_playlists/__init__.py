@@ -8,19 +8,32 @@ from pathlib import Path
 from typing import Any
 
 from aiohttp import ClientResponseError
+import voluptuous as vol
 
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.loader import async_get_integration
 
 from .api import YouTubeApi
-from .const import CARD_FILENAME, CARD_URL_PATH, DOMAIN
+from .const import (
+    CARD_FILENAME,
+    CARD_URL_PATH,
+    CONF_PLAY_MEDIA_PLAYER,
+    CONF_PLAY_SCRIPT,
+    CONF_PLAY_TARGET_MODE,
+    DEFAULT_PLAY_SCRIPT_ENTITY_ID,
+    DOMAIN,
+    PLAY_TARGET_MEDIA_PLAYER,
+    PLAY_TARGET_SCRIPT,
+    SERVICE_PLAY_VIDEO,
+)
 from .coordinator import YouTubeCoordinator
+from .play import async_play_on_media_player
 from .websocket import async_register_websocket
 
 _LOGGER = logging.getLogger(__name__)
@@ -82,6 +95,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: YouTubeConfigEntry) -> b
 
     entry.runtime_data = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    async def _async_handle_play_video(call: ServiceCall) -> None:
+        """Route a play request to either the configured script or media_player."""
+        video_id = call.data["video_id"]
+        mode = entry.options.get(CONF_PLAY_TARGET_MODE, PLAY_TARGET_SCRIPT)
+        media_player_entity = entry.options.get(CONF_PLAY_MEDIA_PLAYER)
+
+        if mode == PLAY_TARGET_MEDIA_PLAYER and media_player_entity:
+            await async_play_on_media_player(
+                hass, entry, media_player_entity, video_id
+            )
+            return
+
+        script_entity_id = entry.options.get(
+            CONF_PLAY_SCRIPT, DEFAULT_PLAY_SCRIPT_ENTITY_ID
+        )
+        domain, object_id = script_entity_id.split(".", 1)
+        await hass.services.async_call(
+            domain, object_id, {"video_id": video_id}, blocking=False
+        )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_PLAY_VIDEO,
+        _async_handle_play_video,
+        schema=vol.Schema({vol.Required("video_id"): str}),
+    )
+    entry.async_on_unload(lambda: hass.services.async_remove(DOMAIN, SERVICE_PLAY_VIDEO))
+
     return True
 
 

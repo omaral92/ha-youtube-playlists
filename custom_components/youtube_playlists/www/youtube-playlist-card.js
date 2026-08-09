@@ -162,7 +162,7 @@ class YouTubePlaylistCard extends HTMLElement {
     this.shadowRoot.querySelectorAll(".video").forEach(button => {
       button.addEventListener("click", () => {
         const videoId = button.dataset.videoId;
-        this._hass.callService("script", "function_play_youtube_video", {
+        this._hass.callService("youtube_playlists", "play_video", {
           video_id: videoId,
         });
       });

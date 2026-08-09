@@ -16,12 +16,19 @@ from homeassistant.helpers.config_entry_oauth2_flow import AbstractOAuth2FlowHan
 
 from .const import (
     CONF_NOTIFY_SCRIPT,
+    CONF_PLAY_MEDIA_PLAYER,
+    CONF_PLAY_SCRIPT,
+    CONF_PLAY_TARGET_MODE,
+    CONF_PLAY_VOLUME,
     CONF_PLAYLIST_FILTER_MODE,
     CONF_PLAYLIST_PATTERN,
+    DEFAULT_PLAY_VOLUME_PERCENT,
     DEFAULT_PLAYLIST_PATTERN,
     DOMAIN,
     FILTER_MODE_ALL,
     FILTER_MODE_PATTERN,
+    PLAY_TARGET_MEDIA_PLAYER,
+    PLAY_TARGET_SCRIPT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,7 +65,7 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict | None = None
     ) -> ConfigFlowResult:
-        """Let the user pick a script to run on new videos, and which playlists to import."""
+        """Options: which playlists to import, how to play videos, new-video script."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -67,27 +74,33 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                 and not user_input.get(CONF_PLAYLIST_PATTERN, "").strip()
             ):
                 errors["playlist_pattern"] = "pattern_required"
+            elif (
+                user_input.get(CONF_PLAY_TARGET_MODE) == PLAY_TARGET_MEDIA_PLAYER
+                and not user_input.get(CONF_PLAY_MEDIA_PLAYER)
+            ):
+                errors["play_media_player"] = "media_player_required"
             else:
                 return self.async_create_entry(data=user_input)
 
-        current_script = self.config_entry.options.get(CONF_NOTIFY_SCRIPT)
-        current_mode = self.config_entry.options.get(
-            CONF_PLAYLIST_FILTER_MODE, FILTER_MODE_ALL
-        )
-        current_pattern = self.config_entry.options.get(
-            CONF_PLAYLIST_PATTERN, DEFAULT_PLAYLIST_PATTERN
-        )
-
+        current = {
+            CONF_PLAYLIST_FILTER_MODE: FILTER_MODE_ALL,
+            CONF_PLAYLIST_PATTERN: DEFAULT_PLAYLIST_PATTERN,
+            CONF_PLAY_TARGET_MODE: PLAY_TARGET_SCRIPT,
+            CONF_PLAY_MEDIA_PLAYER: None,
+            CONF_PLAY_SCRIPT: None,
+            CONF_PLAY_VOLUME: DEFAULT_PLAY_VOLUME_PERCENT,
+            CONF_NOTIFY_SCRIPT: None,
+        }
+        current.update(self.config_entry.options)
         if user_input is not None:
-            # Repopulate the form with what the user just submitted, on error.
-            current_script = user_input.get(CONF_NOTIFY_SCRIPT, current_script)
-            current_mode = user_input.get(CONF_PLAYLIST_FILTER_MODE, current_mode)
-            current_pattern = user_input.get(CONF_PLAYLIST_PATTERN, current_pattern)
+            # Repopulate the form with what was just submitted, on validation error.
+            current.update(user_input)
 
         schema = vol.Schema(
             {
                 vol.Required(
-                    CONF_PLAYLIST_FILTER_MODE, default=current_mode
+                    CONF_PLAYLIST_FILTER_MODE,
+                    default=current[CONF_PLAYLIST_FILTER_MODE],
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=[
@@ -104,10 +117,48 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                     )
                 ),
                 vol.Optional(
-                    CONF_PLAYLIST_PATTERN, default=current_pattern
+                    CONF_PLAYLIST_PATTERN, default=current[CONF_PLAYLIST_PATTERN]
                 ): selector.TextSelector(),
+                vol.Required(
+                    CONF_PLAY_TARGET_MODE, default=current[CONF_PLAY_TARGET_MODE]
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(
+                                value=PLAY_TARGET_SCRIPT, label="Run a script"
+                            ),
+                            selector.SelectOptionDict(
+                                value=PLAY_TARGET_MEDIA_PLAYER,
+                                label="Play directly on a media player (Android TV / Fire TV)",
+                            ),
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="play_target_mode",
+                    )
+                ),
                 vol.Optional(
-                    CONF_NOTIFY_SCRIPT, default=current_script
+                    CONF_PLAY_MEDIA_PLAYER, default=current[CONF_PLAY_MEDIA_PLAYER]
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="media_player")
+                ),
+                vol.Optional(
+                    CONF_PLAY_VOLUME, default=current[CONF_PLAY_VOLUME]
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        max=100,
+                        step=1,
+                        mode=selector.NumberSelectorMode.SLIDER,
+                        unit_of_measurement="%",
+                    )
+                ),
+                vol.Optional(
+                    CONF_PLAY_SCRIPT, default=current[CONF_PLAY_SCRIPT]
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="script")
+                ),
+                vol.Optional(
+                    CONF_NOTIFY_SCRIPT, default=current[CONF_NOTIFY_SCRIPT]
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="script")
                 ),
