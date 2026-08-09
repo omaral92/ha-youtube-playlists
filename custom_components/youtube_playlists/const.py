@@ -11,3 +11,7 @@ WS_TYPE = "youtube_playlists/get_data"
 
 # Options
 CONF_NOTIFY_SCRIPT = "notify_script"
+
+# Frontend card (served directly by the integration, no manual resource needed)
+CARD_URL_PATH = "/youtube_playlists_files"
+CARD_FILENAME = "youtube-playlist-card.js"
