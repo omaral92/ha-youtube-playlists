@@ -1,16 +1,26 @@
-# YouTube Playlists for Home Assistant
+<p align="center">
+  <img src="icon/icon.png" width="360" alt="SmartPantry">
+</p>
 
-A custom Home Assistant integration + Lovelace card that pulls in your YouTube
-playlists and lets you browse and play videos from a dashboard.
+<h1 align="center">YouTube Playlists for Home Assistant</h1>
+
+<p align="center">
+  A custom Home Assistant integration + Lovelace card that pulls in your YouTube
+  playlists and lets you browse and play videos from a dashboard.
+</p>
+
+---
+
+## Features
 
 - Authenticates to YouTube via Google OAuth2 (read-only access)
 - Imports **all playlists**, or only ones matching a **pattern/prefix** you choose
 - Refreshes every 15 minutes
-- Optionally runs a Home Assistant **script** whenever new videos appear in a
-  tracked playlist
-- Ships a **Lovelace card** that shows thumbnails in a grid and calls a script
-  with the video ID when clicked
-- Card supports **custom titles**, **hiding titles**, and long-title clamping
+- Play videos either by **running a script** you choose, or **directly on an
+  Android TV** entity (turns it on, sets volume, launches the video via ADB)
+- Ships a **Lovelace card** that shows thumbnails in a grid, with custom
+  playlist ordering, MDI icons, collapsible sections, and custom/hidden
+  titles
 
 The card's JS is registered automatically by the integration — there's no
 manual "Add Resource" step required.
@@ -58,51 +68,70 @@ more.
 Playlists** → complete the Google login and grant read-only access.
 
 By default this imports playlists whose title starts with `HA`. You can
-change this any time — see [Options](#options) below.
+change this any time — see [Options](#options) below. You'll also need to
+set up playback (script or Android TV) — see
+[How videos play](#how-videos-play).
 
 ## Options
 
-Open **Settings → Devices & Services → YouTube Playlists → Configure**:
+Open **Settings → Devices & Services → YouTube Playlists → Configure**.
+This is a short, two-step flow:
+
+**Step 1 — playlists & playback method**
 
 | Option | Description |
 |---|---|
 | **Playlists to import** | `All playlists`, or `Match a pattern / prefix` |
 | **Pattern** | Only used in pattern mode. Glob syntax, case-insensitive: `HA*` matches titles starting with "HA"; `*Podcast*` matches titles containing "Podcast" anywhere |
-| **Script to run on new videos** | Optional. Pick a `script.*` entity to trigger whenever the coordinator detects new videos in a tracked playlist |
+| **How to play videos** | `Run a script when a video is clicked`, or `Play directly on a media player entity` |
+
+**Step 2 — depends on what you picked above**
+
+If you chose **Run a script**:
+
+| Option | Description |
+|---|---|
+| **Script to run** | Required. A `script.*` entity, called with `video_id` when a video is clicked |
+
+If you chose **Play directly on a media player entity**:
+
+| Option | Description |
+|---|---|
+| **Media player (Android TV only)** | Required. Only Android TV entities set up via the Android TV (ADB) integration are supported |
+| **Volume to set before playing** | 0–100%, default 30% |
 
 Changing any option reloads the integration automatically — no restart
-needed.
+needed. Switching between script/media player modes only asks for the
+fields relevant to that mode.
 
-### The "new videos" script
+### How videos play
 
-If you set a script, it's called with a `new_videos` variable — a list of
-dicts, one per new video:
-
-```yaml
-- playlist_id: PLxxxxxxxxxxxxxxxx
-  playlist_title: HA Music
-  id: dQw4w9WgXcQ
-  title: Some Video Title
-  description: "..."
-  thumbnail: https://...
-  published_at: "2026-08-01T12:00:00Z"
-```
-
-Example script using it:
+**Script mode**: your script is called with a `video_id` variable
+(the YouTube video ID) whenever a video is clicked. Handle playback however
+you like inside the script — cast, browser_mod, media_player, etc.
 
 ```yaml
 sequence:
-  - repeat:
-      for_each: "{{ new_videos }}"
-      sequence:
-        - service: notify.mobile_app
-          data:
-            message: "New video: {{ repeat.item.title }}"
+  - service: media_player.play_media
+    target:
+      entity_id: media_player.living_room
+    data:
+      media_content_id: "https://www.youtube.com/watch?v={{ video_id }}"
+      media_content_type: video
 ```
 
-Note: nothing fires on the very first refresh after setup (that just
-establishes the baseline) — only videos that appear on later refreshes count
-as "new".
+**Android TV mode**: no script needed. Clicking a video calls the
+integration's own `youtube_playlists.play_video` service, which:
+
+1. Turns the TV on if it's off, and waits for it to wake up
+2. Sets the volume to your configured level
+3. Launches the video via an ADB intent
+   (`am start -a android.intent.action.VIEW -d "https://www.youtube.com/watch?v=<id>"`)
+
+This requires the device to already be set up in Home Assistant via the
+**Android TV** integration (the ADB-based one), with ADB debugging enabled
+on the device. It does not work with Fire TV, Chromecast, Roku, or any
+other `media_player` platform — only Android TV/ADB.
 
 ## The Lovelace card
 
@@ -118,11 +147,16 @@ columns: 3
 | Option | Default | Description |
 |---|---|---|
 | `columns` | `3` | Grid columns |
-| `show_playlist_title` | `true` | Show/hide each playlist's heading |
-| `collapsible_playlists` | `false` | Make each playlist collapsible using a summary/expand panel |
+| `show_playlist_title` | `true` | Show/hide each playlist's heading (non-collapsible mode) |
+| `collapsible_playlists` | `false` | Make each playlist collapsible using an expand/collapse panel |
+| `playlist_background` | `true` | Set `false` to make the collapsible panel/header transparent instead of using the card background |
 | `show_titles` | `true` | Show/hide video titles under thumbnails |
 | `video_titles` | `{}` | Override specific video titles — see below |
-| `playlist_titles` | `{}` | Override playlist names, including emoji |
+| `playlist_titles` | `{}` | Override playlist names, can include emoji |
+| `icon` | *(none)* | MDI icon shown next to every playlist heading, e.g. `mdi:book-open-page-variant` (collapsible mode only) |
+| `playlist_icons` | `{}` | Per-playlist MDI icon override — see below |
+| `sort` | `default` | Playlist order — see below |
+| `playlist_order` | `[]` | Explicit order, used when `sort: custom` |
 | `playlist` | *(all)* | Restrict the card to specific playlists, by ID or exact title |
 
 ### Selecting playlists
@@ -135,9 +169,36 @@ playlist:
 columns: 3
 ```
 
+### Sorting playlists
+
+```yaml
+type: custom:youtube-playlist-card
+sort: title_asc
+```
+
+| Value | Behavior |
+|---|---|
+| `default` | Whatever order the integration returns |
+| `title_asc` / `title_desc` | Alphabetical by (display) title |
+| `video_count_asc` / `video_count_desc` | By number of videos in the playlist |
+| `custom` | Explicit order via `playlist_order` |
+
+```yaml
+type: custom:youtube-playlist-card
+sort: custom
+playlist_order:
+  - "Quran"
+  - PLxxxxxxxxxxxxxxxx
+  - "HA Music"
+```
+
+Mix playlist IDs and exact titles freely. Anything not listed is appended at
+the end, keeping its original relative order.
+
 ### Custom playlist names
 
-Override the playlist heading text with `playlist_titles:`. This works by playlist ID or by exact original playlist title, and it can include emoji.
+Override the playlist heading text with `playlist_titles:`. Works by
+playlist ID or by exact original playlist title, and can include emoji.
 
 ```yaml
 type: custom:youtube-playlist-card
@@ -149,14 +210,45 @@ columns: 3
 
 ### Collapsible playlists
 
-If you want each playlist to be collapsible, enable `collapsible_playlists`.
-Each playlist is rendered as a native expand/collapse panel with its title as
-the summary row.
-
 ```yaml
 type: custom:youtube-playlist-card
 collapsible_playlists: true
 columns: 3
+```
+
+Each playlist renders as a native expand/collapse panel, styled like a
+[Bubble Card](https://github.com/Clooos/Bubble-Card) separator: an icon,
+the title, an extending line, and a chevron toggle.
+
+#### Icons
+
+Set an MDI icon shown next to the title (no background circle — just the
+plain icon):
+
+```yaml
+type: custom:youtube-playlist-card
+collapsible_playlists: true
+icon: mdi:book-open-page-variant
+```
+
+Per-playlist override, falls back to `icon`, then to no icon at all if
+neither is set:
+
+```yaml
+playlist_icons:
+  PLxxxxxxxxxxxxxxxx: mdi:book-open-page-variant
+  "Quran": mdi:mosque
+```
+
+#### Transparent background
+
+By default each collapsible playlist panel has a card-style background. Set
+`playlist_background: false` to make it blend into the dashboard instead:
+
+```yaml
+type: custom:youtube-playlist-card
+collapsible_playlists: true
+playlist_background: false
 ```
 
 ### Custom titles / hiding long titles
@@ -179,15 +271,10 @@ video_titles:
 
 ### Playing videos
 
-The card calls:
-
-```
-script.function_play_youtube_video
-```
-
-with `video_id: <YouTube video ID>` when a thumbnail is clicked. Create a
-script with that entity ID/name to handle playback however you like (media
-player, cast, browser_mod, etc).
+The card calls the `youtube_playlists.play_video` service with the clicked
+video's ID. What happens next depends on the integration's **How to play
+videos** option (script or Android TV) — see
+[How videos play](#how-videos-play) above.
 
 ## Notes & limitations
 
@@ -197,19 +284,30 @@ player, cast, browser_mod, etc).
   `playlistItems.list`; only ordinary playlists are supported.
 - Requires read-only YouTube access (`youtube.readonly` scope) — this
   integration cannot modify your playlists or account.
+- Android TV playback mode only works with the ADB-based Android TV
+  integration, not Fire TV, Chromecast, or other media_player platforms.
 
 ## Troubleshooting
 
 - **Card changes don't seem to apply**: the browser caches the card's JS by
   URL. The integration auto-versions the resource using the installed
-  version, so bumping the integration version (or a full HA restart after
-  editing files manually) plus a hard refresh (Ctrl+Shift+R) should pick up
-  changes.
+  version (`manifest.json`), so bumping the version string after editing
+  the card, then hard-refreshing (Ctrl+Shift+R), is required to see
+  changes — a Home Assistant restart alone does not clear browser cache.
+- **Leftover duplicate resource**: if you previously registered the card
+  manually under Settings → Dashboards → Resources (e.g. pointing at
+  `/local/youtube-playlist-card.js`), remove that entry now that the
+  integration registers it automatically — having both loaded can cause the
+  older one to silently win.
 - **"Options have no effect"**: make sure you're editing via **Configure**
   on the integration (Settings → Devices & Services), not the card's own
-  YAML — the playlist filter and script are integration-level options; the
-  card's `show_titles`/`video_titles`/`columns` are separate, per-card YAML
-  options.
+  YAML — the playlist filter and playback method are integration-level
+  options; the card's `show_titles`/`video_titles`/`columns`/etc. are
+  separate, per-card YAML options.
+- **Options form seems to do nothing on Submit**: this usually means an
+  unhandled error occurred while advancing the flow. Check
+  **Settings → System → Logs** (filter for `youtube_playlists`) for a
+  traceback.
 - **Setup fails with an OAuth error**: double check the redirect URI in the
   Google Cloud Console matches exactly what Home Assistant showed you during
   setup.
