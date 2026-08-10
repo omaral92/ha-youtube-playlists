@@ -14,9 +14,10 @@ class YouTubePlaylistCard extends HTMLElement {
       show_playlist_title: true,
       show_titles: true,
       collapsible_playlists: false,
+      playlist_background: true,
       video_titles: {},
-      emoji: null,
-      playlist_emojis: {},
+      icon: null,
+      playlist_icons: {},
       sort: "default",
       playlist_order: [],
       ...config,
@@ -101,11 +102,8 @@ class YouTubePlaylistCard extends HTMLElement {
   }
 
   _playlistIcon(playlist) {
-    const overrides = this.config.playlist_emojis || {};
-    const specific = overrides[playlist.id] ?? overrides[playlist.title];
-    if (specific) return specific;
-    if (this.config.emoji) return this.config.emoji;
-    return (this._playlistTitle(playlist) || "?").trim().slice(0, 1).toUpperCase();
+    const overrides = this.config.playlist_icons || {};
+    return overrides[playlist.id] ?? overrides[playlist.title] ?? this.config.icon ?? null;
   }
 
   _escape(value) {
@@ -134,6 +132,9 @@ class YouTubePlaylistCard extends HTMLElement {
           margin-bottom: 18px;
           background: var(--ha-card-background, var(--card-background-color));
         }
+        details.playlist.no-bg {
+          background: transparent;
+        }
         summary {
           cursor: pointer;
           padding: 0;
@@ -141,6 +142,9 @@ class YouTubePlaylistCard extends HTMLElement {
           outline: none;
           display: block;
           background: var(--ha-card-background, var(--card-background-color));
+        }
+        details.playlist.no-bg summary {
+          background: transparent;
         }
         summary::-webkit-details-marker {
           display: none;
@@ -159,13 +163,10 @@ class YouTubePlaylistCard extends HTMLElement {
           align-items: center;
           justify-content: center;
           flex: 0 0 auto;
-          width: 42px;
-          height: 42px;
-          border-radius: 999px;
-          background: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.05);
+          width: 24px;
+          height: 24px;
           color: var(--primary-text-color);
-          font-size: 20px;
-          line-height: 1;
+          --mdc-icon-size: 24px;
         }
         summary .bubble-name {
           flex: 0 1 auto;
@@ -271,8 +272,12 @@ class YouTubePlaylistCard extends HTMLElement {
     for (const playlist of playlists) {
       if (collapsible) {
         const playlistTitle = this._escape(this._playlistTitle(playlist));
-        const icon = this._escape(this._playlistIcon(playlist));
-        html += `<details class="playlist" open><summary><span class="bubble-container"><span class="bubble-icon">${icon}</span><span class="bubble-name">${playlistTitle}</span><span class="bubble-line"></span><span class="bubble-toggle">▾</span></span></summary><div class="grid">`;
+        const icon = this._playlistIcon(playlist);
+        const iconHtml = icon
+          ? `<span class="bubble-icon"><ha-icon icon="${this._escape(icon)}"></ha-icon></span>`
+          : "";
+        const noBgClass = this.config.playlist_background ? "" : " no-bg";
+        html += `<details class="playlist${noBgClass}" open><summary><span class="bubble-container">${iconHtml}<span class="bubble-name">${playlistTitle}</span><span class="bubble-line"></span><span class="bubble-toggle">▾</span></span></summary><div class="grid">`;
       } else {
         html += `<section class="playlist">`;
         if (this.config.show_playlist_title) {
