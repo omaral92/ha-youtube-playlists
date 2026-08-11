@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_PLAY_VOLUME,
+    CONF_PLAY_POWER_ON_ENTITY,
     DEFAULT_PLAY_VOLUME_PERCENT,
     OFF_STATES,
     TV_ON_POLL_INTERVAL_SECONDS,
@@ -34,9 +35,16 @@ async def async_play_on_media_player(
 
     if is_off:
         _LOGGER.debug("%s is off, turning on before playback", entity_id)
-        await hass.services.async_call(
-            "media_player", "turn_on", {"entity_id": entity_id}, blocking=True
-        )
+        power_on_entity = entry.options.get(CONF_PLAY_POWER_ON_ENTITY)
+        if power_on_entity:
+            await _async_power_on_entity(hass, power_on_entity)
+        else:
+            await hass.services.async_call(
+                "media_player",
+                "turn_on",
+                {"entity_id": entity_id},
+                blocking=True,
+            )
         await _async_wait_until_on(hass, entity_id)
         # ADB often isn't immediately responsive the instant the TV reports "on".
         await asyncio.sleep(TV_ON_SETTLE_DELAY_SECONDS)
@@ -59,6 +67,24 @@ async def async_play_on_media_player(
         "androidtv",
         "adb_command",
         {"entity_id": entity_id, "command": _youtube_intent_command(video_id)},
+        blocking=True,
+    )
+
+
+async def _async_power_on_entity(hass: HomeAssistant, entity_id: str) -> None:
+    """Power on a helper entity before playback."""
+    domain = entity_id.split(".", 1)[0]
+    if domain == "button":
+        service_domain = "button"
+        service = "press"
+    else:
+        service_domain = "homeassistant"
+        service = "turn_on"
+
+    await hass.services.async_call(
+        service_domain,
+        service,
+        {"entity_id": entity_id},
         blocking=True,
     )
 

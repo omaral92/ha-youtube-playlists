@@ -16,6 +16,7 @@ from homeassistant.helpers.config_entry_oauth2_flow import AbstractOAuth2FlowHan
 
 from .const import (
     CONF_PLAY_MEDIA_PLAYER,
+    CONF_PLAY_POWER_ON_ENTITY,
     CONF_PLAY_SCRIPT,
     CONF_PLAY_TARGET_MODE,
     CONF_PLAY_VOLUME,
@@ -151,6 +152,7 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
             else:
                 self._data.update(user_input)
                 self._data.pop(CONF_PLAY_MEDIA_PLAYER, None)
+                self._data.pop(CONF_PLAY_POWER_ON_ENTITY, None)
                 self._data.pop(CONF_PLAY_VOLUME, None)
                 return self.async_create_entry(data=self._data)
 
@@ -193,6 +195,9 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
             CONF_PLAY_MEDIA_PLAYER: self.config_entry.options.get(
                 CONF_PLAY_MEDIA_PLAYER
             ),
+            CONF_PLAY_POWER_ON_ENTITY: self.config_entry.options.get(
+                CONF_PLAY_POWER_ON_ENTITY
+            ),
             CONF_PLAY_VOLUME: self.config_entry.options.get(
                 CONF_PLAY_VOLUME, DEFAULT_PLAY_VOLUME_PERCENT
             ),
@@ -206,6 +211,12 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                     CONF_PLAY_MEDIA_PLAYER, default=current[CONF_PLAY_MEDIA_PLAYER]
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="media_player")
+                ),
+                vol.Optional(
+                    CONF_PLAY_POWER_ON_ENTITY,
+                    default=current[CONF_PLAY_POWER_ON_ENTITY],
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig()
                 ),
                 vol.Optional(
                     CONF_PLAY_VOLUME, default=current[CONF_PLAY_VOLUME]

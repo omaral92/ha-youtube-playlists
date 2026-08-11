@@ -40,6 +40,7 @@
         "description": "Only works with Android TV entities set up via the Android TV (ADB) integration, with ADB debugging enabled on the device. The TV will be turned on and given time to wake up if it's off, volume will be set, then the video will launch automatically.",
         "data": {
           "play_media_player": "Media player (Android TV only)",
+          "play_power_on_entity": "Entity to use for turning on the TV",
           "play_volume": "Volume to set before playing"
         }
       }
