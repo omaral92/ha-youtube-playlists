@@ -16,6 +16,7 @@ class YouTubePlaylistCard extends HTMLElement {
       collapsible_playlists: false,
       playlist_background: true,
       video_titles: {},
+      playlist_titles: {},
       icon: null,
       playlist_icons: {},
       sort: "default",
@@ -92,17 +93,17 @@ class YouTubePlaylistCard extends HTMLElement {
   }
 
   _displayTitle(video) {
-    const overrides = this.config.video_titles || {};
+    const overrides = this.config.video_titles || this.config.videoTitles || {};
     return overrides[video.id] ?? overrides[video.title] ?? video.title;
   }
 
   _playlistTitle(playlist) {
-    const overrides = this.config.playlist_titles || {};
+    const overrides = this.config.playlist_titles || this.config.playlistTitles || {};
     return overrides[playlist.id] ?? overrides[playlist.title] ?? playlist.title;
   }
 
   _playlistIcon(playlist) {
-    const overrides = this.config.playlist_icons || {};
+    const overrides = this.config.playlist_icons || this.config.playlistIcons || {};
     return overrides[playlist.id] ?? overrides[playlist.title] ?? this.config.icon ?? null;
   }
 

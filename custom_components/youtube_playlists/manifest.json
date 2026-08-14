@@ -1,7 +1,7 @@
 {
   "domain": "youtube_playlists",
   "name": "YouTube Playlists",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "documentation": "https://developers.google.com/youtube/v3",
   "issue_tracker": "https://github.com/",
   "codeowners": [],
