@@ -119,7 +119,6 @@ sequence:
       entity_id: media_player.living_room
     data:
       media_content_id: "https://www.youtube.com/watch?v={{ video_id }}"
-      media_content_type: video
 ```
 
 **Media player mode**: no script needed. Clicking a video calls the
@@ -127,8 +126,7 @@ integration's own `youtube_playlists.play_video` service, which:
 
 1. Turns the player on if it's off, and waits for it to wake up
 2. Sets the volume to your configured level
-3. Calls `media_player.play_media` with the YouTube URL and `video` content
-  type
+3. Calls `media_player.play_media` with the YouTube URL as a URI
 
 The configured player must support playing YouTube URLs. Music Assistant
 players are supported when configured with a provider that can play them.

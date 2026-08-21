@@ -62,7 +62,6 @@ async def async_play_on_media_player(
         {
             "entity_id": entity_id,
             "media_content_id": f"https://www.youtube.com/watch?v={video_id}",
-            "media_content_type": "video",
         },
         blocking=True,
     )
