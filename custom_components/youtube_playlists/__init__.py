@@ -23,9 +23,11 @@ from .api import YouTubeApi
 from .const import (
     CARD_FILENAME,
     CARD_URL_PATH,
+    CONF_PLAY_DEFAULT_TARGET,
     CONF_PLAY_MEDIA_PLAYER,
     CONF_PLAY_SCRIPT,
     CONF_PLAY_TARGET_MODE,
+    CONF_PLAY_TV,
     DOMAIN,
     PLAY_TARGET_MEDIA_PLAYER,
     PLAY_TARGET_SCRIPT,
@@ -99,8 +101,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: YouTubeConfigEntry) -> b
     async def _async_handle_play_video(call: ServiceCall) -> None:
         """Route a play request to either the configured script or media_player."""
         video_id = call.data["video_id"]
+        target = call.data.get("target")
         mode = entry.options.get(CONF_PLAY_TARGET_MODE, PLAY_TARGET_SCRIPT)
+        if target is None and mode == PLAY_TARGET_MEDIA_PLAYER:
+            target = entry.options.get(CONF_PLAY_DEFAULT_TARGET, "speaker")
         media_player_entity = entry.options.get(CONF_PLAY_MEDIA_PLAYER)
+        tv_entity = entry.options.get(CONF_PLAY_TV)
+
+        if target == "tv":
+            if mode != PLAY_TARGET_MEDIA_PLAYER or not tv_entity:
+                _LOGGER.error("No TV is configured for YouTube Playlists playback.")
+                return
+            await async_play_on_media_player(hass, entry, tv_entity, video_id)
+            return
+
+        if target == "speaker" and mode != PLAY_TARGET_MEDIA_PLAYER:
+            _LOGGER.error("No speaker is configured for YouTube Playlists playback.")
+            return
 
         if mode == PLAY_TARGET_MEDIA_PLAYER and media_player_entity:
             await async_play_on_media_player(
@@ -125,7 +142,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: YouTubeConfigEntry) -> b
         DOMAIN,
         SERVICE_PLAY_VIDEO,
         _async_handle_play_video,
-        schema=vol.Schema({vol.Required("video_id"): str}),
+        schema=vol.Schema(
+            {
+                vol.Required("video_id"): str,
+                vol.Optional("target"): vol.In(["tv", "speaker"]),
+            }
+        ),
     )
     entry.async_on_unload(lambda: hass.services.async_remove(DOMAIN, SERVICE_PLAY_VIDEO))
 

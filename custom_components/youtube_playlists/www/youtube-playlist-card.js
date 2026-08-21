@@ -5,6 +5,8 @@ class YouTubePlaylistCard extends HTMLElement {
     this.config = {};
     this.data = null;
     this._loaded = false;
+    this._longPressTimer = null;
+    this._longPressTriggered = false;
   }
 
   setConfig(config) {
@@ -114,6 +116,49 @@ class YouTubePlaylistCard extends HTMLElement {
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  _playVideo(videoId, target) {
+    const data = { video_id: videoId };
+    if (target) data.target = target;
+    this._hass.callService("youtube_playlists", "play_video", data);
+  }
+
+  _showPlaybackPrompt(videoId) {
+    const playback = this.data?.playback || {};
+    const choices = [];
+    if (playback.tv) choices.push({ target: "tv", label: "Play on TV" });
+    if (playback.speaker) choices.push({ target: "speaker", label: "Play on speaker" });
+
+    if (choices.length < 2) {
+      this._playVideo(videoId, choices[0]?.target);
+      return;
+    }
+
+    const prompt = document.createElement("div");
+    prompt.className = "playback-prompt";
+    prompt.innerHTML = `
+      <div class="playback-dialog" role="dialog" aria-modal="true" aria-label="Choose playback device">
+        <div class="playback-heading">Play video on</div>
+        <div class="playback-actions">
+          ${choices.map(choice => `<button class="playback-choice" data-target="${choice.target}">${choice.label}</button>`).join("")}
+          <button class="playback-cancel">Cancel</button>
+        </div>
+      </div>`;
+    this.shadowRoot.appendChild(prompt);
+
+    const close = () => prompt.remove();
+    prompt.addEventListener("click", event => {
+      if (event.target === prompt) close();
+    });
+    prompt.querySelectorAll(".playback-choice").forEach(choice => {
+      choice.addEventListener("click", () => {
+        this._playVideo(videoId, choice.dataset.target);
+        close();
+      });
+    });
+    prompt.querySelector(".playback-cancel").addEventListener("click", close);
+    prompt.querySelector(".playback-choice").focus();
   }
 
   _render() {
@@ -244,6 +289,52 @@ class YouTubePlaylistCard extends HTMLElement {
         .video.no-title .thumb {
           border-radius: 12px;
         }
+        .playback-prompt {
+          position: fixed;
+          inset: 0;
+          z-index: 10;
+          display: grid;
+          place-items: center;
+          padding: 20px;
+          background: rgba(0, 0, 0, .45);
+        }
+        .playback-dialog {
+          width: min(360px, 100%);
+          padding: 20px;
+          border-radius: 16px;
+          color: var(--primary-text-color);
+          background: var(--ha-card-background, var(--card-background-color));
+          box-shadow: 0 12px 40px rgba(0, 0, 0, .35);
+        }
+        .playback-heading {
+          margin-bottom: 14px;
+          font-size: 1.1rem;
+          font-weight: 600;
+        }
+        .playback-actions {
+          display: grid;
+          gap: 8px;
+        }
+        .playback-actions button {
+          min-height: 44px;
+          border: 0;
+          border-radius: 10px;
+          padding: 10px 14px;
+          color: var(--primary-text-color);
+          background: var(--secondary-background-color);
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .playback-actions button:hover,
+        .playback-actions button:focus-visible {
+          background: var(--primary-color);
+          color: var(--text-primary-color, white);
+          outline: none;
+        }
+        .playback-cancel {
+          margin-top: 4px;
+        }
         @media (max-width: 600px) {
           .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
@@ -305,11 +396,31 @@ class YouTubePlaylistCard extends HTMLElement {
     this.shadowRoot.innerHTML = html;
 
     this.shadowRoot.querySelectorAll(".video").forEach(button => {
-      button.addEventListener("click", () => {
+      button.addEventListener("pointerdown", event => {
+        if (event.button !== 0) return;
+        this._longPressTriggered = false;
+        this._longPressTimer = window.setTimeout(() => {
+          this._longPressTriggered = true;
+          this._showPlaybackPrompt(button.dataset.videoId);
+        }, 550);
+      });
+      const cancelLongPress = () => {
+        if (this._longPressTimer !== null) {
+          window.clearTimeout(this._longPressTimer);
+          this._longPressTimer = null;
+        }
+      };
+      button.addEventListener("pointerup", cancelLongPress);
+      button.addEventListener("pointercancel", cancelLongPress);
+      button.addEventListener("pointerleave", cancelLongPress);
+      button.addEventListener("click", event => {
+        if (this._longPressTriggered) {
+          event.preventDefault();
+          this._longPressTriggered = false;
+          return;
+        }
         const videoId = button.dataset.videoId;
-        this._hass.callService("youtube_playlists", "play_video", {
-          video_id: videoId,
-        });
+        this._playVideo(videoId);
       });
     });
   }

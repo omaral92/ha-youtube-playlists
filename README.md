@@ -16,8 +16,8 @@
 - Authenticates to YouTube via Google OAuth2 (read-only access)
 - Imports **all playlists**, or only ones matching a **pattern/prefix** you choose
 - Refreshes every 15 minutes
-- Play videos either by **running a script** you choose, or **directly on an
-  Android TV** entity (turns it on, sets volume, launches the video via ADB)
+- Play videos either by **running a script** you choose, or **directly on a
+  music-capable media player** entity (turns it on, sets volume, and plays the YouTube URL)
 - Ships a **Lovelace card** that shows thumbnails in a grid, with custom
   playlist ordering, MDI icons, collapsible sections, and custom/hidden
   titles
@@ -69,7 +69,7 @@ Playlists** → complete the Google login and grant read-only access.
 
 By default this imports playlists whose title starts with `HA`. You can
 change this any time — see [Options](#options) below. You'll also need to
-set up playback (script or Android TV) — see
+set up playback (script or music player) — see
 [How videos play](#how-videos-play).
 
 ## Options
@@ -97,7 +97,9 @@ If you chose **Play directly on a media player entity**:
 
 | Option | Description |
 |---|---|
-| **Media player (Android TV only)** | Required. Only Android TV entities set up via the Android TV (ADB) integration are supported |
+| **Music player** | Required. Choose a media player that can play YouTube URLs, such as a Music Assistant player |
+| **Default playback destination** | Choose whether normal thumbnail taps play on the speaker or TV |
+| **TV** | Optional. Choose a media player to make available as the TV destination when a thumbnail is held |
 | **Volume to set before playing** | 0–100%, default 30% |
 
 Changing any option reloads the integration automatically — no restart
@@ -120,18 +122,19 @@ sequence:
       media_content_type: video
 ```
 
-**Android TV mode**: no script needed. Clicking a video calls the
+**Media player mode**: no script needed. Clicking a video calls the
 integration's own `youtube_playlists.play_video` service, which:
 
-1. Turns the TV on if it's off, and waits for it to wake up
+1. Turns the player on if it's off, and waits for it to wake up
 2. Sets the volume to your configured level
-3. Launches the video via an ADB intent
-   (`am start -a android.intent.action.VIEW -d "https://www.youtube.com/watch?v=<id>"`)
+3. Calls `media_player.play_media` with the YouTube URL and `video` content
+  type
 
-This requires the device to already be set up in Home Assistant via the
-**Android TV** integration (the ADB-based one), with ADB debugging enabled
-on the device. It does not work with Fire TV, Chromecast, Roku, or any
-other `media_player` platform — only Android TV/ADB.
+The configured player must support playing YouTube URLs. Music Assistant
+players are supported when configured with a provider that can play them.
+
+Holding a thumbnail opens a choice between the configured TV and music
+player. A normal tap uses the default playback target.
 
 ## The Lovelace card
 
@@ -272,8 +275,9 @@ video_titles:
 ### Playing videos
 
 The card calls the `youtube_playlists.play_video` service with the clicked
-video's ID. What happens next depends on the integration's **How to play
-videos** option (script or Android TV) — see
+video's ID. Holding a thumbnail lets you choose between the configured TV and
+music player. What happens next depends on the integration's **How to play
+videos** option — see
 [How videos play](#how-videos-play) above.
 
 ## Notes & limitations

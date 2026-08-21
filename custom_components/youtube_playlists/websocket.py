@@ -5,7 +5,14 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 import voluptuous as vol
 
-from .const import DOMAIN, WS_TYPE
+from .const import (
+    CONF_PLAY_MEDIA_PLAYER,
+    CONF_PLAY_TARGET_MODE,
+    CONF_PLAY_TV,
+    DOMAIN,
+    PLAY_TARGET_MEDIA_PLAYER,
+    WS_TYPE,
+)
 
 
 def async_register_websocket(hass: HomeAssistant) -> None:
@@ -32,4 +39,20 @@ def websocket_get_data(hass: HomeAssistant, connection, msg) -> None:
         connection.send_error(msg["id"], "no_data", "YouTube data is not available")
         return
 
-    connection.send_result(msg["id"], {"playlists": coordinator.data})
+    options = entry.options
+    connection.send_result(
+        msg["id"],
+        {
+            "playlists": coordinator.data,
+            "playback": {
+                "speaker": (
+                    options.get(CONF_PLAY_TARGET_MODE) == PLAY_TARGET_MEDIA_PLAYER
+                    and bool(options.get(CONF_PLAY_MEDIA_PLAYER))
+                ),
+                "tv": (
+                    options.get(CONF_PLAY_TARGET_MODE) == PLAY_TARGET_MEDIA_PLAYER
+                    and bool(options.get(CONF_PLAY_TV))
+                ),
+            },
+        },
+    )

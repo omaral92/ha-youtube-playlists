@@ -15,9 +15,11 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.config_entry_oauth2_flow import AbstractOAuth2FlowHandler
 
 from .const import (
+    CONF_PLAY_DEFAULT_TARGET,
     CONF_PLAY_MEDIA_PLAYER,
     CONF_PLAY_POWER_ON_ENTITY,
     CONF_PLAY_SCRIPT,
+    CONF_PLAY_TV,
     CONF_PLAY_TARGET_MODE,
     CONF_PLAY_VOLUME,
     CONF_PLAYLIST_FILTER_MODE,
@@ -28,6 +30,8 @@ from .const import (
     FILTER_MODE_ALL,
     FILTER_MODE_PATTERN,
     PLAY_TARGET_MEDIA_PLAYER,
+    PLAY_DEFAULT_SPEAKER,
+    PLAY_DEFAULT_TV,
     PLAY_TARGET_SCRIPT,
 )
 
@@ -152,6 +156,7 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
             else:
                 self._data.update(user_input)
                 self._data.pop(CONF_PLAY_MEDIA_PLAYER, None)
+                self._data.pop(CONF_PLAY_TV, None)
                 self._data.pop(CONF_PLAY_POWER_ON_ENTITY, None)
                 self._data.pop(CONF_PLAY_VOLUME, None)
                 return self.async_create_entry(data=self._data)
@@ -175,17 +180,17 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
     async def async_step_media_player(
         self, user_input: dict | None = None
     ) -> ConfigFlowResult:
-        """Step 2b: pick the media player and volume (media player mode only).
-
-        Only Android TV entities are supported, since playback is
-        launched via an ADB intent (requires the Android TV integration with
-        ADB debugging enabled on the device).
-        """
+        """Step 2b: pick the media player and volume (media player mode only)."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
             if not user_input.get(CONF_PLAY_MEDIA_PLAYER):
                 errors["play_media_player"] = "media_player_required"
+            elif (
+                user_input.get(CONF_PLAY_DEFAULT_TARGET) == PLAY_DEFAULT_TV
+                and not user_input.get(CONF_PLAY_TV)
+            ):
+                errors["play_tv"] = "tv_required_for_default"
             else:
                 self._data.update(user_input)
                 self._data.pop(CONF_PLAY_SCRIPT, None)
@@ -195,6 +200,10 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
             CONF_PLAY_MEDIA_PLAYER: self.config_entry.options.get(
                 CONF_PLAY_MEDIA_PLAYER
             ),
+            CONF_PLAY_DEFAULT_TARGET: self.config_entry.options.get(
+                CONF_PLAY_DEFAULT_TARGET, PLAY_DEFAULT_SPEAKER
+            ),
+            CONF_PLAY_TV: self.config_entry.options.get(CONF_PLAY_TV),
             CONF_PLAY_POWER_ON_ENTITY: self.config_entry.options.get(
                 CONF_PLAY_POWER_ON_ENTITY
             ),
@@ -209,6 +218,27 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
             {
                 vol.Required(
                     CONF_PLAY_MEDIA_PLAYER, default=current[CONF_PLAY_MEDIA_PLAYER]
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="media_player")
+                ),
+                vol.Required(
+                    CONF_PLAY_DEFAULT_TARGET,
+                    default=current[CONF_PLAY_DEFAULT_TARGET],
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(
+                                value=PLAY_DEFAULT_SPEAKER, label="Speaker"
+                            ),
+                            selector.SelectOptionDict(
+                                value=PLAY_DEFAULT_TV, label="TV"
+                            ),
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                ),
+                vol.Optional(
+                    CONF_PLAY_TV, default=current[CONF_PLAY_TV]
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="media_player")
                 ),

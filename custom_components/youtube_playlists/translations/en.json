@@ -37,10 +37,12 @@
       },
       "media_player": {
         "title": "Media player playback",
-        "description": "Only works with Android TV entities set up via the Android TV (ADB) integration, with ADB debugging enabled on the device. The TV will be turned on and given time to wake up if it's off, volume will be set, then the video will launch automatically.",
+        "description": "Choose a media player that can play YouTube URLs, such as a Music Assistant player. It will be turned on if it's off, the volume will be set, then the video will launch automatically.",
         "data": {
-          "play_media_player": "Media player (Android TV only)",
-          "play_power_on_entity": "Entity to use for turning on the TV",
+          "play_media_player": "Music player",
+          "play_default_target": "Default playback destination",
+          "play_tv": "TV (optional, for long-press playback)",
+          "play_power_on_entity": "Entity to use for turning on the player",
           "play_volume": "Volume to set before playing"
         }
       }
@@ -48,6 +50,7 @@
     "error": {
       "pattern_required": "Enter a pattern, or switch back to \"All playlists\".",
       "media_player_required": "Choose a media player.",
+      "tv_required_for_default": "Choose a TV when TV is the default destination.",
       "script_required": "Choose a script."
     }
   },

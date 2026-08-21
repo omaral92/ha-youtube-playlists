@@ -1,4 +1,4 @@
-"""Logic for playing a YouTube video on an Android TV media_player target."""
+"""Logic for playing a YouTube video on a media_player target."""
 from __future__ import annotations
 
 import asyncio
@@ -20,16 +20,10 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _youtube_intent_command(video_id: str) -> str:
-    """Build the ADB shell command that opens a specific YouTube video."""
-    url = f"https://www.youtube.com/watch?v={video_id}"
-    return f'am start -a android.intent.action.VIEW -d "{url}"'
-
-
 async def async_play_on_media_player(
     hass: HomeAssistant, entry: ConfigEntry, entity_id: str, video_id: str
 ) -> None:
-    """Turn on the TV if needed, wait for it, set volume, then launch the video."""
+    """Turn on the player if needed, set volume, then start the video."""
     state = hass.states.get(entity_id)
     is_off = state is None or state.state in OFF_STATES
 
@@ -46,7 +40,6 @@ async def async_play_on_media_player(
                 blocking=True,
             )
         await _async_wait_until_on(hass, entity_id)
-        # ADB often isn't immediately responsive the instant the TV reports "on".
         await asyncio.sleep(TV_ON_SETTLE_DELAY_SECONDS)
     else:
         _LOGGER.debug("%s is already on, skipping power-on", entity_id)
@@ -64,9 +57,13 @@ async def async_play_on_media_player(
             _LOGGER.warning("Could not set volume on %s: %s", entity_id, err)
 
     await hass.services.async_call(
-        "androidtv",
-        "adb_command",
-        {"entity_id": entity_id, "command": _youtube_intent_command(video_id)},
+        "media_player",
+        "play_media",
+        {
+            "entity_id": entity_id,
+            "media_content_id": f"https://www.youtube.com/watch?v={video_id}",
+            "media_content_type": "video",
+        },
         blocking=True,
     )
 
