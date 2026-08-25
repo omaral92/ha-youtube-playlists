@@ -27,7 +27,7 @@ DEFAULT_PLAY_VOLUME_PERCENT = 30
 
 # How long to wait for a TV to report "on" after turning it on, and how
 # often to check, plus a settle delay after it does before ADB is reliable.
-TV_ON_TIMEOUT_SECONDS = 25
+TV_ON_TIMEOUT_SECONDS = 35
 TV_ON_POLL_INTERVAL_SECONDS = 2
 TV_ON_SETTLE_DELAY_SECONDS = 3
 OFF_STATES = ("off", "unavailable", "unknown", "standby")
