@@ -23,7 +23,13 @@ _LOGGER = logging.getLogger(__name__)
 def _youtube_intent_command(video_id: str) -> str:
     """Build the ADB shell command that opens a specific YouTube video."""
     url = f"https://www.youtube.com/watch?v={video_id}"
-    return f'am start -a android.intent.action.VIEW -d "{url}"'
+    # Some Android TV YouTube builds show a profile/account picker on first launch.
+    # Confirming the default selection immediately after launch dismisses that screen
+    # and allows the video to open normally.
+    return (
+        f'am start -a android.intent.action.VIEW -d "{url}" '
+        "&& sleep 2 && input keyevent KEYCODE_ENTER"
+    )
 
 
 async def async_play_on_media_player(
