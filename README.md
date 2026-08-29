@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icon/icon.png" width="360" alt="SmartPantry">
+  <img src="icon/icon.png" width="360" alt="Youtube-Playlist">
 </p>
 
 <h1 align="center">YouTube Playlists for Home Assistant</h1>
