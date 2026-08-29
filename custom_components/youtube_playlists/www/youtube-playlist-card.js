@@ -214,6 +214,7 @@ class YouTubePlaylistCard extends HTMLElement {
           padding: 0;
         }
         .video {
+          position: relative;
           cursor: pointer;
           overflow: hidden;
           border-radius: 12px;
@@ -224,6 +225,62 @@ class YouTubePlaylistCard extends HTMLElement {
           text-align: left;
           padding: 0;
           font: inherit;
+          transform: scale(1);
+          transition: transform .18s cubic-bezier(.4,0,.2,1);
+          -webkit-tap-highlight-color: transparent;
+        }
+        .video:active {
+          transform: scale(.95);
+        }
+        .video.is-active {
+          animation: video-ring .7s cubic-bezier(.2,.7,.3,1);
+        }
+        @keyframes video-ring {
+          0% {
+            box-shadow: 0 0 0 0 rgba(var(--rgb-primary-color, 3, 169, 244), .55);
+          }
+          100% {
+            box-shadow: 0 0 0 14px rgba(var(--rgb-primary-color, 3, 169, 244), 0);
+          }
+        }
+        .video-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(0, 0, 0, .32);
+          backdrop-filter: blur(3px);
+          -webkit-backdrop-filter: blur(3px);
+          opacity: 0;
+          pointer-events: none;
+        }
+        .video.is-active .video-overlay {
+          animation: video-overlay-fade .85s ease forwards;
+        }
+        @keyframes video-overlay-fade {
+          0%   { opacity: 0; }
+          18%  { opacity: 1; }
+          70%  { opacity: 1; }
+          100% { opacity: 0; }
+        }
+        .video-overlay .play-icon {
+          width: 38px;
+          height: 38px;
+          color: #fff;
+          filter: drop-shadow(0 1px 4px rgba(0,0,0,.4));
+          transform: scale(.4);
+          opacity: 0;
+        }
+        .video.is-active .video-overlay .play-icon {
+          animation: video-icon-pop .85s cubic-bezier(.34, 1.56, .64, 1) forwards;
+        }
+        @keyframes video-icon-pop {
+          0%   { transform: scale(.4);  opacity: 0; }
+          25%  { transform: scale(1.15); opacity: 1; }
+          40%  { transform: scale(1);    opacity: 1; }
+          78%  { transform: scale(1);    opacity: 1; }
+          100% { transform: scale(1);    opacity: 0; }
         }
         .thumb {
           width: 100%;
@@ -293,6 +350,9 @@ class YouTubePlaylistCard extends HTMLElement {
         html += `
           <button class="video${showTitle ? "" : " no-title"}" data-video-id="${this._escape(video.id)}" title="${this._escape(video.title)}">
             ${video.thumbnail ? `<img class="thumb" loading="lazy" src="${this._escape(video.thumbnail)}">` : `<div class="thumb"></div>`}
+            <span class="video-overlay">
+              <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </span>
             ${showTitle ? `<span class="title">${this._escape(displayTitle)}</span>` : ""}
           </button>`;
       }
@@ -306,6 +366,19 @@ class YouTubePlaylistCard extends HTMLElement {
 
     this.shadowRoot.querySelectorAll(".video").forEach(button => {
       button.addEventListener("click", () => {
+        // Restart the animation even on rapid repeat clicks of the same video.
+        this.shadowRoot.querySelectorAll(".video.is-active").forEach(b => {
+          if (b !== button) b.classList.remove("is-active");
+        });
+        button.classList.remove("is-active");
+        void button.offsetWidth; // force reflow so the animation can re-trigger
+        button.classList.add("is-active");
+        button.addEventListener(
+          "animationend",
+          () => button.classList.remove("is-active"),
+          { once: true }
+        );
+
         const videoId = button.dataset.videoId;
         this._hass.callService("youtube_playlists", "play_video", {
           video_id: videoId,
