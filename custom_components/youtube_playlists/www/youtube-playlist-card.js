@@ -5,6 +5,10 @@ class YouTubePlaylistCard extends HTMLElement {
     this.config = {};
     this.data = null;
     this._loaded = false;
+    this._nowPlayingId = null;
+    this._nowPlayingState = null; // "playing" | "paused" | null
+    this._optimisticUntil = 0;
+    this._clickLockedUntil = 0;
   }
 
   setConfig(config) {
@@ -21,6 +25,7 @@ class YouTubePlaylistCard extends HTMLElement {
       playlist_icons: {},
       sort: "default",
       playlist_order: [],
+      player_entity: null, // e.g. "media_player.living_room_tv" - reports real now-playing state
       ...config,
     };
     this._render();
@@ -31,7 +36,49 @@ class YouTubePlaylistCard extends HTMLElement {
     if (!this._loaded) {
       this._loaded = true;
       this._load();
+      return;
     }
+    if (!this.config.player_entity || !this.data) return;
+
+    // While an optimistic click-flash is active, don't let a stale/lagging
+    // entity update flicker the indicator off before Cast actually starts.
+    if (Date.now() < this._optimisticUntil) return;
+
+    const { id, state } = this._computeNowPlaying();
+    if (id !== this._nowPlayingId || state !== this._nowPlayingState) {
+      this._nowPlayingId = id;
+      this._nowPlayingState = state;
+      this._render();
+    }
+  }
+
+  // Matches the configured media_player's current media against the loaded
+  // playlist videos, by content id first (exact) then by title (fallback).
+  _computeNowPlaying() {
+    const entity = this._hass?.states?.[this.config.player_entity];
+    if (!entity) return { id: null, state: null };
+
+    const state = entity.state;
+    if (state !== "playing" && state !== "paused") return { id: null, state: null };
+
+    const attrs = entity.attributes || {};
+    const mediaContentId = attrs.media_content_id;
+    const mediaTitle = (attrs.media_title || "").trim();
+    if (!mediaContentId && !mediaTitle) return { id: null, state: null };
+
+    for (const playlist of this.data.playlists || []) {
+      for (const video of playlist.videos || []) {
+        if (mediaContentId && video.id === mediaContentId) return { id: video.id, state };
+      }
+    }
+    if (mediaTitle) {
+      for (const playlist of this.data.playlists || []) {
+        for (const video of playlist.videos || []) {
+          if (video.title && video.title.trim() === mediaTitle) return { id: video.id, state };
+        }
+      }
+    }
+    return { id: null, state: null };
   }
 
   async _load() {
@@ -301,6 +348,69 @@ class YouTubePlaylistCard extends HTMLElement {
         .video.no-title .thumb {
           border-radius: 12px;
         }
+        .video.is-playing {
+          box-shadow: 0 0 0 2px var(--primary-color, #03a9f4);
+        }
+        .video.is-playing::after {
+          content: "";
+          position: absolute;
+          top: 7px;
+          right: 7px;
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: var(--primary-color, #03a9f4);
+          z-index: 2;
+          animation: video-playing-pulse 1.6s ease-out infinite;
+        }
+        .video.is-paused {
+          box-shadow: 0 0 0 2px var(--secondary-text-color, #9e9e9e);
+        }
+        .video.is-paused::after {
+          content: "";
+          position: absolute;
+          top: 7px;
+          right: 7px;
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: var(--secondary-text-color, #9e9e9e);
+          z-index: 2;
+        }
+        @keyframes video-playing-pulse {
+          0%   { box-shadow: 0 0 0 0 rgba(var(--rgb-primary-color, 3, 169, 244), .6); }
+          70%  { box-shadow: 0 0 0 7px rgba(var(--rgb-primary-color, 3, 169, 244), 0); }
+          100% { box-shadow: 0 0 0 0 rgba(var(--rgb-primary-color, 3, 169, 244), 0); }
+        }
+        .skeleton-thumb, .skeleton-title {
+          background: linear-gradient(
+            100deg,
+            rgba(var(--rgb-primary-text-color, 0, 0, 0), .06) 30%,
+            rgba(var(--rgb-primary-text-color, 0, 0, 0), .14) 50%,
+            rgba(var(--rgb-primary-text-color, 0, 0, 0), .06) 70%
+          );
+          background-size: 200% 100%;
+          animation: skeleton-shimmer 1.4s ease-in-out infinite;
+        }
+        .skeleton {
+          border-radius: 12px;
+          overflow: hidden;
+          background: var(--ha-card-background, var(--card-background-color));
+          box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.25));
+        }
+        .skeleton-thumb {
+          width: 100%;
+          aspect-ratio: 16 / 9;
+        }
+        .skeleton-title {
+          height: 12px;
+          margin: 10px 9px 12px;
+          border-radius: 4px;
+        }
+        @keyframes skeleton-shimmer {
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
         @media (max-width: 600px) {
           .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
@@ -308,7 +418,15 @@ class YouTubePlaylistCard extends HTMLElement {
     `;
 
     if (!this.data) {
-      this.shadowRoot.innerHTML = style + `<div class="wrap">Loading YouTube…</div>`;
+      const cols = Number(this.config.columns) || 3;
+      const skeletonCount = cols * 2;
+      const showTitle = this.config.show_titles;
+      let skeletonHtml = `<div class="wrap"><div class="grid">`;
+      for (let i = 0; i < skeletonCount; i++) {
+        skeletonHtml += `<div class="skeleton"><div class="skeleton-thumb"></div>${showTitle ? `<div class="skeleton-title"></div>` : ""}</div>`;
+      }
+      skeletonHtml += `</div></div>`;
+      this.shadowRoot.innerHTML = style + skeletonHtml;
       return;
     }
 
@@ -348,7 +466,7 @@ class YouTubePlaylistCard extends HTMLElement {
         const displayTitle = this._displayTitle(video);
         const showTitle = this.config.show_titles;
         html += `
-          <button class="video${showTitle ? "" : " no-title"}" data-video-id="${this._escape(video.id)}" title="${this._escape(video.title)}">
+          <button class="video${showTitle ? "" : " no-title"}${video.id === this._nowPlayingId ? (this._nowPlayingState === "paused" ? " is-paused" : " is-playing") : ""}" data-video-id="${this._escape(video.id)}" title="${this._escape(video.title)}">
             ${video.thumbnail ? `<img class="thumb" loading="lazy" src="${this._escape(video.thumbnail)}">` : `<div class="thumb"></div>`}
             <span class="video-overlay">
               <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
@@ -366,7 +484,12 @@ class YouTubePlaylistCard extends HTMLElement {
 
     this.shadowRoot.querySelectorAll(".video").forEach(button => {
       button.addEventListener("click", () => {
-        // Restart the animation even on rapid repeat clicks of the same video.
+        // Ignore rapid repeat taps (own or on another thumbnail) within the cooldown window.
+        const now = Date.now();
+        if (now < this._clickLockedUntil) return;
+        this._clickLockedUntil = now + 600;
+
+        // Restart the tap animation even on rapid repeat clicks of the same video.
         this.shadowRoot.querySelectorAll(".video.is-active").forEach(b => {
           if (b !== button) b.classList.remove("is-active");
         });
@@ -379,7 +502,19 @@ class YouTubePlaylistCard extends HTMLElement {
           { once: true }
         );
 
+        // Move the "now playing" indicator to this thumbnail (optimistic —
+        // the real media_player state will confirm/correct it shortly).
+        const previouslyPlaying = this.shadowRoot.querySelector(".video.is-playing, .video.is-paused");
+        if (previouslyPlaying && previouslyPlaying !== button) {
+          previouslyPlaying.classList.remove("is-playing", "is-paused");
+        }
+        button.classList.remove("is-paused");
+        button.classList.add("is-playing");
+
         const videoId = button.dataset.videoId;
+        this._nowPlayingId = videoId;
+        this._nowPlayingState = "playing";
+        this._optimisticUntil = Date.now() + 4000;
         this._hass.callService("youtube_playlists", "play_video", {
           video_id: videoId,
         });
