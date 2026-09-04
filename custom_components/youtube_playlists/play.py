@@ -15,6 +15,7 @@ from .const import (
     TV_ON_POLL_INTERVAL_SECONDS,
     TV_ON_SETTLE_DELAY_SECONDS,
     TV_ON_TIMEOUT_SECONDS,
+    YOUTUBE_PROFILE_PICKER_DELAY_SECONDS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,7 +29,8 @@ def _youtube_intent_command(video_id: str) -> str:
     # and allows the video to open normally.
     return (
         f'am start -a android.intent.action.VIEW -d "{url}" '
-        "&& sleep 2 && input keyevent KEYCODE_ENTER"
+        f"&& sleep {YOUTUBE_PROFILE_PICKER_DELAY_SECONDS} "
+        "&& input keyevent KEYCODE_ENTER"
     )
 
 
