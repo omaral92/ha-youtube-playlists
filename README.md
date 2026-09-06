@@ -125,7 +125,8 @@ integration's own `youtube_playlists.play_video` service, which:
 
 1. Turns the TV on if it's off, and waits for it to wake up
 2. Sets the volume to your configured level
-3. Launches the video via an ADB intent
+3. Waits for the configured profile-picker delay, then confirms the default YouTube profile
+4. Launches the video via an ADB intent
    (`am start -a android.intent.action.VIEW -d "https://www.youtube.com/watch?v=<id>"`)
 
 This requires the device to already be set up in Home Assistant via the

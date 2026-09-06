@@ -17,12 +17,14 @@ from homeassistant.helpers.config_entry_oauth2_flow import AbstractOAuth2FlowHan
 from .const import (
     CONF_PLAY_MEDIA_PLAYER,
     CONF_PLAY_POWER_ON_ENTITY,
+    CONF_PLAY_PROFILE_PICKER_DELAY,
     CONF_PLAY_SCRIPT,
     CONF_PLAY_TARGET_MODE,
     CONF_PLAY_VOLUME,
     CONF_PLAYLIST_FILTER_MODE,
     CONF_PLAYLIST_PATTERN,
     DEFAULT_PLAY_VOLUME_PERCENT,
+    DEFAULT_PLAY_PROFILE_PICKER_DELAY_SECONDS,
     DEFAULT_PLAYLIST_PATTERN,
     DOMAIN,
     FILTER_MODE_ALL,
@@ -153,6 +155,7 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                 self._data.update(user_input)
                 self._data.pop(CONF_PLAY_MEDIA_PLAYER, None)
                 self._data.pop(CONF_PLAY_POWER_ON_ENTITY, None)
+                self._data.pop(CONF_PLAY_PROFILE_PICKER_DELAY, None)
                 self._data.pop(CONF_PLAY_VOLUME, None)
                 return self.async_create_entry(data=self._data)
 
@@ -198,6 +201,10 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
             CONF_PLAY_POWER_ON_ENTITY: self.config_entry.options.get(
                 CONF_PLAY_POWER_ON_ENTITY
             ),
+            CONF_PLAY_PROFILE_PICKER_DELAY: self.config_entry.options.get(
+                CONF_PLAY_PROFILE_PICKER_DELAY,
+                DEFAULT_PLAY_PROFILE_PICKER_DELAY_SECONDS,
+            ),
             CONF_PLAY_VOLUME: self.config_entry.options.get(
                 CONF_PLAY_VOLUME, DEFAULT_PLAY_VOLUME_PERCENT
             ),
@@ -227,6 +234,18 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                         step=1,
                         mode=selector.NumberSelectorMode.SLIDER,
                         unit_of_measurement="%",
+                    )
+                ),
+                vol.Required(
+                    CONF_PLAY_PROFILE_PICKER_DELAY,
+                    default=current[CONF_PLAY_PROFILE_PICKER_DELAY],
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        max=30,
+                        step=1,
+                        mode=selector.NumberSelectorMode.BOX,
+                        unit_of_measurement="s",
                     )
                 ),
             }

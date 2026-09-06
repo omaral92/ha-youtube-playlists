@@ -41,7 +41,8 @@
         "data": {
           "play_media_player": "Media player (Android TV only)",
           "play_power_on_entity": "Entity to use for turning on the TV",
-          "play_volume": "Volume to set before playing"
+          "play_volume": "Volume to set before playing",
+          "play_profile_picker_delay": "Seconds to wait before confirming the YouTube profile"
         }
       }
     },

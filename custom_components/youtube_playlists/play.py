@@ -8,20 +8,21 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import (
-    CONF_PLAY_VOLUME,
     CONF_PLAY_POWER_ON_ENTITY,
+    CONF_PLAY_PROFILE_PICKER_DELAY,
+    CONF_PLAY_VOLUME,
+    DEFAULT_PLAY_PROFILE_PICKER_DELAY_SECONDS,
     DEFAULT_PLAY_VOLUME_PERCENT,
     OFF_STATES,
     TV_ON_POLL_INTERVAL_SECONDS,
     TV_ON_SETTLE_DELAY_SECONDS,
     TV_ON_TIMEOUT_SECONDS,
-    YOUTUBE_PROFILE_PICKER_DELAY_SECONDS,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _youtube_intent_command(video_id: str) -> str:
+def _youtube_intent_command(video_id: str, profile_picker_delay: int) -> str:
     """Build the ADB shell command that opens a specific YouTube video."""
     url = f"https://www.youtube.com/watch?v={video_id}"
     # Some Android TV YouTube builds show a profile/account picker on first launch.
@@ -29,7 +30,7 @@ def _youtube_intent_command(video_id: str) -> str:
     # and allows the video to open normally.
     return (
         f'am start -a android.intent.action.VIEW -d "{url}" '
-        f"&& sleep {YOUTUBE_PROFILE_PICKER_DELAY_SECONDS} "
+        f"&& sleep {profile_picker_delay} "
         "&& input keyevent KEYCODE_ENTER"
     )
 
@@ -71,10 +72,18 @@ async def async_play_on_media_player(
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("Could not set volume on %s: %s", entity_id, err)
 
+    command = _youtube_intent_command(
+        video_id,
+        entry.options.get(
+            CONF_PLAY_PROFILE_PICKER_DELAY,
+            DEFAULT_PLAY_PROFILE_PICKER_DELAY_SECONDS,
+        ),
+    )
+    _LOGGER.info("Sending ADB command to %s: %s", entity_id, command)
     await hass.services.async_call(
         "androidtv",
         "adb_command",
-        {"entity_id": entity_id, "command": _youtube_intent_command(video_id)},
+        {"entity_id": entity_id, "command": command},
         blocking=True,
     )
 
