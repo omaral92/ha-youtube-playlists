@@ -25,10 +25,12 @@ PLAY_TARGET_SCRIPT = "script"
 PLAY_TARGET_MEDIA_PLAYER = "media_player"
 DEFAULT_PLAY_VOLUME_PERCENT = 30
 
-# How long to wait for a TV to report "on" after turning it on, and how
-# often to check, plus a settle delay after it does before ADB is reliable.
+# How long to wait for a TV to report "on" after turning it on, how often to
+# check, and how long to allow Android TV to finish re-registering before ADB
+# commands become dependable again.
 TV_ON_TIMEOUT_SECONDS = 35
 TV_ON_POLL_INTERVAL_SECONDS = 2
+TV_ON_RELOAD_DELAY_SECONDS = 5
 TV_ON_SETTLE_DELAY_SECONDS = 3
 OFF_STATES = ("off", "unavailable", "unknown", "standby")
 

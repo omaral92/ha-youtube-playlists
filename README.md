@@ -98,6 +98,7 @@ If you chose **Play directly on a media player entity**:
 | Option | Description |
 |---|---|
 | **Media player (Android TV only)** | Required. Only Android TV entities set up via the Android TV (ADB) integration are supported |
+| **Entity to use for turning on the TV** | Optional entity used to wake the TV before the integration waits for the media player to come online. Useful for a separate smart plug, switch, or button |
 | **Volume to set before playing** | 0–100%, default 30% |
 
 Changing any option reloads the integration automatically — no restart
