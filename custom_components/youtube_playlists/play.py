@@ -74,7 +74,11 @@ async def async_play_on_media_player(
         online_timeout = _delay_option(
             entry, CONF_PLAY_ONLINE_TIMEOUT, DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS
         )
-        _LOGGER.debug("%s is off, turning on before playback", entity_id)
+        _LOGGER.debug(
+            "%s is %s, powering on the TV before playback",
+            entity_id,
+            state.state if state else "missing",
+        )
 
         # 1. Turn on the TV.
         await _async_turn_on_tv(hass, entry, entity_id)
@@ -90,7 +94,9 @@ async def async_play_on_media_player(
         # 4. Brief settle period once the device is online.
         await asyncio.sleep(settle_delay)
     else:
-        _LOGGER.debug("%s is already on, skipping power-on", entity_id)
+        _LOGGER.debug(
+            "%s is %s (not off), skipping power-on", entity_id, state.state
+        )
 
     volume_percent = entry.options.get(CONF_PLAY_VOLUME, DEFAULT_PLAY_VOLUME_PERCENT)
     if volume_percent is not None:
@@ -116,12 +122,32 @@ async def async_play_on_media_player(
 async def _async_turn_on_tv(
     hass: HomeAssistant, entry: ConfigEntry, media_player_entity: str
 ) -> None:
-    """Turn on the TV through the configured power entity when available."""
+    """Turn on the TV.
+
+    If a power-on entity is configured (typically a button that powers the TV
+    on when pressed) that entity is used. The media player is only the ADB
+    target: when the TV is off it is usually unavailable and cannot be told
+    to turn on.
+    """
     power_on_entity = entry.options.get(CONF_PLAY_POWER_ON_ENTITY)
     if power_on_entity:
         await _async_power_on_entity(hass, power_on_entity)
         return
 
+    # No power-on entity: fall back to the media player itself. This can only
+    # work while the media player is available.
+    state = hass.states.get(media_player_entity)
+    if state is None or state.state in UNAVAILABLE_STATES:
+        message = (
+            "The TV is off and no 'Entity to use for turning on the TV' is "
+            f"configured, and {media_player_entity} is unavailable, so it "
+            "cannot be turned on. Set a power-on entity (for example a "
+            "button) in the YouTube Playlists options."
+        )
+        _LOGGER.error(message)
+        raise HomeAssistantError(message)
+
+    _LOGGER.debug("Turning on %s via media_player.turn_on", media_player_entity)
     await hass.services.async_call(
         "media_player",
         "turn_on",
@@ -131,15 +157,30 @@ async def _async_turn_on_tv(
 
 
 async def _async_power_on_entity(hass: HomeAssistant, entity_id: str) -> None:
-    """Power on a helper entity before playback."""
-    domain = entity_id.split(".", 1)[0]
-    if domain == "button":
-        service_domain = "button"
-        service = "press"
-    else:
-        service_domain = "homeassistant"
-        service = "turn_on"
+    """Power on the TV through the configured power-on entity.
 
+    Buttons are pressed; other entities are turned on. Home Assistant silently
+    skips service calls to missing/unavailable entities, so check first and
+    fail loudly instead of leaving the TV off with no explanation.
+    (A button that has never been pressed reports "unknown", which is normal.)
+    """
+    state = hass.states.get(entity_id)
+    if state is None or state.state == "unavailable":
+        message = (
+            f"The power-on entity {entity_id} is "
+            f"{'missing' if state is None else 'unavailable'}, so the TV was "
+            "not turned on and the YouTube launch command was not sent."
+        )
+        _LOGGER.error(message)
+        raise HomeAssistantError(message)
+
+    domain = entity_id.split(".", 1)[0]
+    if domain in ("button", "input_button"):
+        service_domain, service = domain, "press"
+    else:
+        service_domain, service = "homeassistant", "turn_on"
+
+    _LOGGER.debug("Powering on TV: calling %s.%s on %s", service_domain, service, entity_id)
     await hass.services.async_call(
         service_domain,
         service,

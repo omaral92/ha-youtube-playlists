@@ -247,7 +247,9 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                 ),
                 vol.Optional(
                     CONF_PLAY_POWER_ON_ENTITY,
-                    default=current[CONF_PLAY_POWER_ON_ENTITY],
+                    description={
+                        "suggested_value": current[CONF_PLAY_POWER_ON_ENTITY]
+                    },
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig()
                 ),

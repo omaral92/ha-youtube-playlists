@@ -26,7 +26,12 @@ ADB_COMMAND = (
 )
 
 
-def _build(initial_state: str, options: dict, unavailable_polls: int = 0):
+def _build(
+    initial_state: str,
+    options: dict,
+    unavailable_polls: int = 0,
+    power_state: str | None = "unknown",
+):
     """Build a fake hass whose calls are recorded, in order, in ``events``.
 
     After the Android TV entry is reloaded the entity reports "unavailable"
@@ -36,7 +41,9 @@ def _build(initial_state: str, options: dict, unavailable_polls: int = 0):
     events: list[tuple] = []
     box = {"reloaded": False, "polls_left": unavailable_polls}
 
-    def _get_state(_entity_id):
+    def _get_state(entity_id):
+        if entity_id != MEDIA_PLAYER:  # the power-on entity
+            return None if power_state is None else SimpleNamespace(state=power_state)
         if not box["reloaded"]:
             return SimpleNamespace(state=initial_state)
         if box["polls_left"] is None:
@@ -183,3 +190,92 @@ async def test_tv_already_on_skips_wake_sequence(monkeypatch) -> None:
         blocking=True,
     )
     assert events[-1] == ("service", "androidtv", "adb_command")
+
+
+@pytest.mark.asyncio
+async def test_power_on_button_is_pressed_not_the_media_player(monkeypatch) -> None:
+    """A configured button entity powers the TV; the media player only gets ADB."""
+    options = {"play_power_on_entity": "button.tv_power"}
+    hass, entry, registry, events, sleep = _build("unavailable", options)
+    _patch(monkeypatch, registry, sleep)
+
+    await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    calls = hass.services.async_call.await_args_list
+    assert calls[0].args == ("button", "press", {"entity_id": "button.tv_power"})
+    assert ("service", "media_player", "turn_on") not in events
+    assert calls[-1].args[:2] == ("androidtv", "adb_command")
+    assert calls[-1].args[2]["entity_id"] == MEDIA_PLAYER
+
+
+@pytest.mark.asyncio
+async def test_unavailable_power_on_button_raises_and_stops(monkeypatch) -> None:
+    """HA silently skips calls to unavailable entities; we must not."""
+    options = {"play_power_on_entity": "button.tv_power"}
+    hass, entry, registry, events, sleep = _build(
+        "unavailable", options, power_state="unavailable"
+    )
+    _patch(monkeypatch, registry, sleep)
+
+    with pytest.raises(HomeAssistantError, match="button.tv_power"):
+        await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    assert events == []  # nothing pressed, nothing launched
+
+
+@pytest.mark.asyncio
+async def test_missing_power_on_entity_raises(monkeypatch) -> None:
+    options = {"play_power_on_entity": "button.tv_power"}
+    hass, entry, registry, events, sleep = _build("off", options, power_state=None)
+    _patch(monkeypatch, registry, sleep)
+
+    with pytest.raises(HomeAssistantError, match="missing"):
+        await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    assert events == []
+
+
+@pytest.mark.asyncio
+async def test_never_pressed_button_is_fine(monkeypatch) -> None:
+    """A button that was never pressed reports "unknown" - that is normal."""
+    options = {"play_power_on_entity": "button.tv_power"}
+    hass, entry, registry, events, sleep = _build("unavailable", options, power_state="unknown")
+    _patch(monkeypatch, registry, sleep)
+
+    await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    assert hass.services.async_call.await_args_list[0].args[:2] == ("button", "press")
+
+
+@pytest.mark.asyncio
+async def test_input_button_is_pressed(monkeypatch) -> None:
+    options = {"play_power_on_entity": "input_button.tv_power"}
+    hass, entry, registry, events, sleep = _build("off", options)
+    _patch(monkeypatch, registry, sleep)
+
+    await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    assert hass.services.async_call.await_args_list[0].args[:2] == ("input_button", "press")
+
+
+@pytest.mark.asyncio
+async def test_switch_power_on_entity_is_turned_on(monkeypatch) -> None:
+    options = {"play_power_on_entity": "switch.tv_plug"}
+    hass, entry, registry, events, sleep = _build("off", options)
+    _patch(monkeypatch, registry, sleep)
+
+    await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    assert hass.services.async_call.await_args_list[0].args[:2] == ("homeassistant", "turn_on")
+
+
+@pytest.mark.asyncio
+async def test_no_power_entity_and_media_player_unavailable_raises(monkeypatch) -> None:
+    """Without a power-on entity, an unavailable media player can't be turned on."""
+    hass, entry, registry, events, sleep = _build("unavailable", {})
+    _patch(monkeypatch, registry, sleep)
+
+    with pytest.raises(HomeAssistantError, match="power-on entity|turning on the TV"):
+        await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    assert events == []

@@ -98,7 +98,7 @@ If you chose **Play directly on a media player entity**:
 | Option | Description |
 |---|---|
 | **Media player (Android TV only)** | Required. Only Android TV entities set up via the Android TV (ADB) integration are supported |
-| **Entity to use for turning on the TV** | Optional entity used to wake the TV before the integration waits for the media player to come online. Useful for a separate smart plug, switch, or button |
+| **Entity to use for turning on the TV** | Optional entity that powers the TV on. A `button` / `input_button` is **pressed**; anything else (switch, plug, script…) is turned on. The media player above is only used as the ADB target. If you leave this empty the media player itself is asked to turn on, which only works while it is available. If this entity is missing or unavailable, the launch is aborted with an error instead of being silently skipped |
 | **Volume to set before playing** | 0–100%, default 30% |
 | **Wake-up delay** | Seconds to wait after turning the TV on, before reloading the Android TV integration. Default 5 s |
 | **Online timeout** | Max seconds to wait, after the reload, for the media player to become available again. Some TVs need 20 s+ after power-on before ADB accepts connections. Default 60 s. If it's exceeded, the launch command is *not* sent and an error is logged |
