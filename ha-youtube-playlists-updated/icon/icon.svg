@@ -1,0 +1,28 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF453A"/>
+      <stop offset="100%" stop-color="#CC1F1A"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- Playlist lines (top right area) -->
+  <g stroke="#FFFFFF" stroke-width="26" stroke-linecap="round">
+    <line x1="260" y1="150" x2="404" y2="150"/>
+    <line x1="260" y1="212" x2="404" y2="212"/>
+    <line x1="260" y1="274" x2="360" y2="274"/>
+  </g>
+  <!-- small bullet dots for the list lines -->
+  <g fill="#FFFFFF">
+    <circle cx="222" cy="150" r="13"/>
+    <circle cx="222" cy="212" r="13"/>
+    <circle cx="222" cy="274" r="13"/>
+  </g>
+
+  <!-- Play button circle -->
+  <circle cx="200" cy="340" r="98" fill="#FFFFFF"/>
+  <path d="M172 296 L244 340 L172 384 Z" fill="#CC1F1A"/>
+</svg>
