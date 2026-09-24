@@ -19,6 +19,7 @@ CONF_PLAY_VOLUME = "play_volume"
 CONF_PLAY_WAKE_DELAY = "play_wake_delay"
 CONF_PLAY_SETTLE_DELAY = "play_settle_delay"
 CONF_PLAY_ONLINE_TIMEOUT = "play_online_timeout"
+CONF_PLAY_RELOAD_INTERVAL = "play_reload_interval"
 
 FILTER_MODE_ALL = "all"
 FILTER_MODE_PATTERN = "pattern"
@@ -33,7 +34,10 @@ DEFAULT_PLAY_VOLUME_PERCENT = 30
 #   1. turn the TV on
 #   2. wait DEFAULT_PLAY_WAKE_DELAY_SECONDS   (lets the TV start booting)
 #   3. reload the Android TV / ADB config entry
-#   3b. wait until the media player entity is actually available again, up to
+#   3b. wait until the media player entity is actually available again. While
+#       it is not, reload the entry again every DEFAULT_PLAY_RELOAD_INTERVAL_SECONDS
+#       (Home Assistant's own setup retries back off 5s/10s/20s/40s..., so
+#       waiting on them alone detects a ready TV late). Give up after
 #       DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS. Some TVs need 20s+ after power-on
 #       before their ADB server accepts connections; while that is the case
 #       the entity is unavailable and Home Assistant silently ignores service
@@ -43,6 +47,7 @@ DEFAULT_PLAY_VOLUME_PERCENT = 30
 DEFAULT_PLAY_WAKE_DELAY_SECONDS = 5
 DEFAULT_PLAY_SETTLE_DELAY_SECONDS = 3
 DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS = 60
+DEFAULT_PLAY_RELOAD_INTERVAL_SECONDS = 5
 MAX_PLAY_DELAY_SECONDS = 60
 MAX_PLAY_ONLINE_TIMEOUT_SECONDS = 180
 PLAY_ONLINE_POLL_INTERVAL_SECONDS = 1

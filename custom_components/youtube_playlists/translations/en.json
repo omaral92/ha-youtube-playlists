@@ -44,7 +44,8 @@
           "play_volume": "Volume to set before playing",
           "play_wake_delay": "Wake-up delay (seconds to wait after turning the TV on, before reloading Android TV)",
           "play_settle_delay": "Settle delay (seconds to wait after reloading Android TV, before launching)",
-          "play_online_timeout": "Online timeout (max seconds to wait for the TV's ADB connection to come back after the reload)"
+          "play_online_timeout": "Online timeout (max seconds to wait for the TV's ADB connection to come back after the reload)",
+          "play_reload_interval": "Reload retry interval (seconds between extra Android TV reloads while waiting for ADB; 0 = don't retry)"
         }
       }
     },

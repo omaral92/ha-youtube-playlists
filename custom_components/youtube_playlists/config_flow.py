@@ -20,12 +20,14 @@ from .const import (
     CONF_PLAY_SCRIPT,
     CONF_PLAY_TARGET_MODE,
     CONF_PLAY_ONLINE_TIMEOUT,
+    CONF_PLAY_RELOAD_INTERVAL,
     CONF_PLAY_SETTLE_DELAY,
     CONF_PLAY_VOLUME,
     CONF_PLAY_WAKE_DELAY,
     CONF_PLAYLIST_FILTER_MODE,
     CONF_PLAYLIST_PATTERN,
     DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS,
+    DEFAULT_PLAY_RELOAD_INTERVAL_SECONDS,
     DEFAULT_PLAY_SETTLE_DELAY_SECONDS,
     DEFAULT_PLAY_VOLUME_PERCENT,
     DEFAULT_PLAY_WAKE_DELAY_SECONDS,
@@ -178,6 +180,7 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                 self._data.pop(CONF_PLAY_WAKE_DELAY, None)
                 self._data.pop(CONF_PLAY_SETTLE_DELAY, None)
                 self._data.pop(CONF_PLAY_ONLINE_TIMEOUT, None)
+                self._data.pop(CONF_PLAY_RELOAD_INTERVAL, None)
                 return self.async_create_entry(data=self._data)
 
         current_script = self.config_entry.options.get(CONF_PLAY_SCRIPT)
@@ -234,6 +237,9 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
             CONF_PLAY_ONLINE_TIMEOUT: self.config_entry.options.get(
                 CONF_PLAY_ONLINE_TIMEOUT, DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS
             ),
+            CONF_PLAY_RELOAD_INTERVAL: self.config_entry.options.get(
+                CONF_PLAY_RELOAD_INTERVAL, DEFAULT_PLAY_RELOAD_INTERVAL_SECONDS
+            ),
         }
         if user_input is not None:
             current.update(user_input)
@@ -273,6 +279,9 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                 vol.Optional(
                     CONF_PLAY_ONLINE_TIMEOUT, default=current[CONF_PLAY_ONLINE_TIMEOUT]
                 ): _delay_selector(MAX_PLAY_ONLINE_TIMEOUT_SECONDS),
+                vol.Optional(
+                    CONF_PLAY_RELOAD_INTERVAL, default=current[CONF_PLAY_RELOAD_INTERVAL]
+                ): _delay_selector(),
             }
         )
 

@@ -102,6 +102,7 @@ If you chose **Play directly on a media player entity**:
 | **Volume to set before playing** | 0–100%, default 30% |
 | **Wake-up delay** | Seconds to wait after turning the TV on, before reloading the Android TV integration. Default 5 s |
 | **Online timeout** | Max seconds to wait, after the reload, for the media player to become available again. Some TVs need 20 s+ after power-on before ADB accepts connections. Default 60 s. If it's exceeded, the launch command is *not* sent and an error is logged |
+| **Reload retry interval** | While waiting for the media player to come online, reload the Android TV entry again every this many seconds. Home Assistant's own retries back off (5 s, 10 s, 20 s, 40 s…), so this detects a ready TV much sooner. Default 5 s, 0 disables |
 | **Settle delay** | Seconds to wait after the reload, before the launch command is sent. Default 3 s |
 
 Changing any option reloads the integration automatically — no restart
@@ -132,7 +133,8 @@ If the TV is off:
 1. Turns the TV on
 2. Waits for the **wake-up delay** (default 5 s)
 3. Reloads the Android TV / ADB integration, then waits until the media
-   player is actually available again (up to the **online timeout**, default 60 s)
+   player is actually available again (up to the **online timeout**, default 60 s),
+   reloading again every **reload retry interval** (default 5 s) while it isn't
 4. Waits for the **settle delay** (default 3 s)
 5. Sets the volume to your configured level, then launches the video via an
    ADB intent

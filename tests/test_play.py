@@ -18,6 +18,7 @@ from custom_components.youtube_playlists.const import (
 )
 from custom_components.youtube_playlists.play import async_play_on_media_player
 
+CLOCK = {"t": 0.0}  # fake monotonic clock, advanced by the fake sleep
 MEDIA_PLAYER = "media_player.mi_tv_stick"
 ADB_COMMAND = (
     'am start -a android.intent.action.VIEW '
@@ -39,6 +40,7 @@ def _build(
     starting), then "idle". ``unavailable_polls=None`` means it never returns.
     """
     events: list[tuple] = []
+    CLOCK["t"] = 0.0
     box = {"reloaded": False, "polls_left": unavailable_polls}
 
     def _get_state(entity_id):
@@ -62,6 +64,7 @@ def _build(
 
     async def _sleep(seconds):
         events.append(("sleep", seconds))
+        CLOCK["t"] += seconds
 
     hass = MagicMock()
     hass.states.get.side_effect = _get_state
@@ -79,6 +82,9 @@ def _patch(monkeypatch, registry, sleep):
         "custom_components.youtube_playlists.play.er.async_get", lambda _h: registry
     )
     monkeypatch.setattr("custom_components.youtube_playlists.play.asyncio.sleep", sleep)
+    monkeypatch.setattr(
+        "custom_components.youtube_playlists.play._monotonic", lambda: CLOCK["t"]
+    )
 
 
 def _sleeps(events):
@@ -114,19 +120,21 @@ async def test_waits_for_entity_to_come_online_before_launching(monkeypatch) -> 
     """Regression: the ADB server took ~17s to come up after the reload.
 
     The launch command used to be sent after a fixed 3s, while the entity was
-    still unavailable, and Home Assistant silently dropped it.
+    still unavailable, and Home Assistant silently dropped it. Retries are off
+    here (interval 0) so this isolates the waiting behaviour.
     """
-    hass, entry, registry, events, sleep = _build("off", {}, unavailable_polls=17)
+    hass, entry, registry, events, sleep = _build(
+        "off", {"play_reload_interval": 0}, unavailable_polls=17
+    )
     _patch(monkeypatch, registry, sleep)
 
     await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
 
     reload_idx = events.index(("reload", "abc123"))
     adb_idx = events.index(("service", "androidtv", "adb_command"))
-    polls_between = [
-        e for e in events[reload_idx:adb_idx] if e == ("sleep", 1)
-    ]
+    polls_between = [e for e in events[reload_idx:adb_idx] if e == ("sleep", 1)]
     assert len(polls_between) == 17  # polled until the entity was available
+    assert events.count(("reload", "abc123")) == 1  # no retries
     assert events[adb_idx - 2 : adb_idx] == [  # settle delay comes after it's online
         ("sleep", DEFAULT_PLAY_SETTLE_DELAY_SECONDS),
         ("service", "media_player", "volume_set"),
@@ -134,10 +142,43 @@ async def test_waits_for_entity_to_come_online_before_launching(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_reloads_again_every_interval_while_unavailable(monkeypatch) -> None:
+    """While the entity is unavailable, re-trigger a connection attempt.
+
+    HA's own setup retries back off 5s/10s/20s/40s, so a TV whose ADB came up
+    early would otherwise be noticed late.
+    """
+    hass, entry, registry, events, sleep = _build("off", {}, unavailable_polls=17)
+    _patch(monkeypatch, registry, sleep)
+
+    await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    # initial reload + retries at t=5s and t=10s. (Each retry also does one
+    # immediate extra state check, so the fake entity comes online at t=15s,
+    # just before a third retry would fire.)
+    assert events.count(("reload", "abc123")) == 3
+    adb_idx = events.index(("service", "androidtv", "adb_command"))
+    assert events.index(("reload", "abc123")) < adb_idx
+
+
+@pytest.mark.asyncio
+async def test_no_extra_reload_when_already_online(monkeypatch) -> None:
+    """If the reload brings it online at once, don't reload again."""
+    hass, entry, registry, events, sleep = _build("off", {})
+    _patch(monkeypatch, registry, sleep)
+
+    await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    assert events.count(("reload", "abc123")) == 1
+
+
+@pytest.mark.asyncio
 async def test_timeout_raises_and_does_not_send_launch(monkeypatch) -> None:
     """If the TV never comes online, fail loudly and don't fire into the void."""
     hass, entry, registry, events, sleep = _build(
-        "off", {CONF_PLAY_ONLINE_TIMEOUT: 10}, unavailable_polls=None
+        "off",
+        {CONF_PLAY_ONLINE_TIMEOUT: 10, "play_reload_interval": 0},
+        unavailable_polls=None,
     )
     _patch(monkeypatch, registry, sleep)
 
@@ -279,3 +320,15 @@ async def test_no_power_entity_and_media_player_unavailable_raises(monkeypatch) 
         await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
 
     assert events == []
+
+
+@pytest.mark.asyncio
+async def test_failing_button_press_is_raised(monkeypatch) -> None:
+    """An error from the button press must surface, not be swallowed."""
+    options = {"play_power_on_entity": "button.tv_power"}
+    hass, entry, registry, events, sleep = _build("off", options)
+    hass.services.async_call = AsyncMock(side_effect=HomeAssistantError("device unreachable"))
+    _patch(monkeypatch, registry, sleep)
+
+    with pytest.raises(HomeAssistantError, match="device unreachable"):
+        await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
