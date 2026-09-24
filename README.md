@@ -100,6 +100,9 @@ If you chose **Play directly on a media player entity**:
 | **Media player (Android TV only)** | Required. Only Android TV entities set up via the Android TV (ADB) integration are supported |
 | **Entity to use for turning on the TV** | Optional entity used to wake the TV before the integration waits for the media player to come online. Useful for a separate smart plug, switch, or button |
 | **Volume to set before playing** | 0–100%, default 30% |
+| **Wake-up delay** | Seconds to wait after turning the TV on, before reloading the Android TV integration. Default 5 s |
+| **Online timeout** | Max seconds to wait, after the reload, for the media player to become available again. Some TVs need 20 s+ after power-on before ADB accepts connections. Default 60 s. If it's exceeded, the launch command is *not* sent and an error is logged |
+| **Settle delay** | Seconds to wait after the reload, before the launch command is sent. Default 3 s |
 
 Changing any option reloads the integration automatically — no restart
 needed. Switching between script/media player modes only asks for the
@@ -124,10 +127,18 @@ sequence:
 **Android TV mode**: no script needed. Clicking a video calls the
 integration's own `youtube_playlists.play_video` service, which:
 
-1. Turns the TV on if it's off, and waits for it to wake up
-2. Sets the volume to your configured level
-3. Launches the video via an ADB intent
+If the TV is off:
+
+1. Turns the TV on
+2. Waits for the **wake-up delay** (default 5 s)
+3. Reloads the Android TV / ADB integration, then waits until the media
+   player is actually available again (up to the **online timeout**, default 60 s)
+4. Waits for the **settle delay** (default 3 s)
+5. Sets the volume to your configured level, then launches the video via an
+   ADB intent
    (`am start -a android.intent.action.VIEW -d "https://www.youtube.com/watch?v=<id>"`)
+
+If the TV is already on, steps 1–4 are skipped.
 
 This requires the device to already be set up in Home Assistant via the
 **Android TV** integration (the ADB-based one), with ADB debugging enabled
