@@ -303,6 +303,18 @@ videos** option (script or Android TV) — see
 
 ## Troubleshooting
 
+- **"Custom element doesn't exist: youtube-playlist-card" that clears up on
+  its own**: since v1.5.5 the card is registered as a proper Lovelace
+  resource (Settings → Dashboards → Resources), not injected as an extra
+  frontend script. The older method could lose a race with Home Assistant's
+  own frontend bundle on some page loads — worse on a warm cache, not
+  better — which is what caused this to appear intermittently. If you're on
+  an older version, update; if it still happens after updating, check
+  Settings → Dashboards → Resources for a `youtube-playlist-card.js` entry
+  — it should be listed there now (module type). If it's missing, check the
+  Home Assistant log for `Could not register ... as a Lovelace resource`;
+  that means your Lovelace is in YAML resource mode, and you'll need to add
+  the resource line manually as shown in the log warning.
 - **Card changes don't seem to apply**: the browser caches the card's JS by
   URL. The integration auto-versions the resource using the installed
   version (`manifest.json`), so bumping the version string after editing

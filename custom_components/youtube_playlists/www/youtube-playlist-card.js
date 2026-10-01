@@ -527,4 +527,10 @@ class YouTubePlaylistCard extends HTMLElement {
   }
 }
 
-customElements.define("youtube-playlist-card", YouTubePlaylistCard);
+// Guard against a duplicate define(), which throws and would otherwise stop
+// the whole script (breaking the last card in the file too). This can
+// legitimately happen if a user also added this URL manually as a Lovelace
+// resource on top of the integration's own automatic registration.
+if (!customElements.get("youtube-playlist-card")) {
+  customElements.define("youtube-playlist-card", YouTubePlaylistCard);
+}

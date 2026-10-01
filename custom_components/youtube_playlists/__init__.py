@@ -42,17 +42,30 @@ type YouTubeConfigEntry = ConfigEntry[YouTubeCoordinator]
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up the integration."""
-    add_extra_js_url(hass, "/youtube_playlists/youtube-playlist-card.js")
     async_register_websocket(hass)
     await _async_register_frontend_card(hass)
     return True
 
 
 async def _async_register_frontend_card(hass: HomeAssistant) -> None:
-    """Serve the bundled Lovelace card and add it as a frontend resource.
+    """Serve the bundled Lovelace card and register it for the frontend.
 
     This means users never need to manually add a Lovelace resource -
     installing (or updating) the integration is enough.
+
+    IMPORTANT: this is added as a Lovelace *resource*, not via
+    ``add_extra_js_url()``. add_extra_js_url() injects a <script> into the
+    frontend's index page, so it loads during bootstrap, racing Home
+    Assistant's own app bundle. That bundle installs a scoped custom-element
+    registry over window.customElements; if our script's customElements
+    .define() runs first, it lands in the *native* registry, the scoped one
+    then shadows it, and Lovelace's customElements.get("youtube-playlist-card")
+    comes back empty even though the element is registered. That is the
+    intermittent "Custom element doesn't exist" error - it is a registry race,
+    not a loading failure, which is also why it clears up on some reloads and
+    a warm cache makes it worse rather than better. Lovelace resources are
+    fetched by the dashboard loader well after bootstrap, so they always see
+    the scoped registry already in place.
     """
     www_dir = Path(__file__).parent / "www"
 
@@ -68,7 +81,69 @@ async def _async_register_frontend_card(hass: HomeAssistant) -> None:
     # so users don't have to manually edit a ?v= query string after every update.
     integration = await async_get_integration(hass, DOMAIN)
     card_url = f"{CARD_URL_PATH}/{CARD_FILENAME}?v={integration.version}"
+
+    if await _async_register_lovelace_resource(hass, card_url):
+        return
+
+    # Fall back to add_extra_js_url for YAML-mode Lovelace (which has no
+    # resource storage to write to) or if anything above went wrong. This
+    # keeps the card working, just with a small chance of the registry race
+    # this function exists to avoid.
+    _LOGGER.warning(
+        "Could not register %s as a Lovelace resource; falling back to "
+        "add_extra_js_url. If the card intermittently fails to load with "
+        "'Custom element doesn't exist', add it manually as a Lovelace "
+        "resource (Settings > Dashboards > Resources) instead.",
+        card_url,
+    )
     add_extra_js_url(hass, card_url)
+
+
+async def _async_register_lovelace_resource(hass: HomeAssistant, card_url: str) -> bool:
+    """Add ``card_url`` as a Lovelace module resource, if possible.
+
+    Returns True if the resource is registered (or already was), False if
+    Lovelace resource storage isn't available here (YAML resource mode, or
+    Lovelace not set up) and the caller should fall back.
+    """
+    try:
+        from homeassistant.components.lovelace.resources import (  # noqa: PLC0415
+            ResourceStorageCollection,
+        )
+
+        lovelace_data = hass.data.get("lovelace")
+        resources = getattr(lovelace_data, "resources", None)
+        if resources is None and isinstance(lovelace_data, dict):
+            resources = lovelace_data.get("resources")  # older HA cores
+        if not isinstance(resources, ResourceStorageCollection):
+            # Either Lovelace isn't set up yet, or it's in YAML resource mode
+            # (ResourceYAMLCollection), which has no way to add items -
+            # editing resources there means editing the user's YAML file.
+            return False
+
+        # async_get_info() forces the collection to load; async_items() alone
+        # does not, and would look empty (and so create a duplicate) on an
+        # unloaded collection every restart.
+        await resources.async_get_info()
+
+        prefix = card_url.split("?", 1)[0]
+        already_present = any(
+            item.get("url", "").split("?", 1)[0] == prefix
+            for item in resources.async_items() or []
+        )
+        if already_present:
+            return True
+
+        await resources.async_create_item({"res_type": "module", "url": card_url})
+        _LOGGER.debug("Registered %s as a Lovelace resource", card_url)
+        return True
+    except Exception:  # noqa: BLE001 - never break setup over the card resource
+        _LOGGER.debug(
+            "Registering %s as a Lovelace resource failed; will fall back",
+            card_url,
+            exc_info=True,
+        )
+        return False
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: YouTubeConfigEntry) -> bool:
