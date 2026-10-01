@@ -19,6 +19,7 @@ from .const import (
     CONF_PLAY_WAKE_DELAY,
     DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS,
     DEFAULT_PLAY_RELOAD_INTERVAL_SECONDS,
+    PLAY_ONLINE_PROGRESS_LOG_INTERVAL_SECONDS,
     DEFAULT_PLAY_SETTLE_DELAY_SECONDS,
     DEFAULT_PLAY_VOLUME_PERCENT,
     DEFAULT_PLAY_WAKE_DELAY_SECONDS,
@@ -292,20 +293,37 @@ async def _async_wait_until_available(
     """
     started = _monotonic()
     last_reload = started
+    last_progress_log = started
     reloads = 0
+    last_seen_state = "missing"
     while True:
         state = hass.states.get(entity_id)
+        last_seen_state = state.state if state is not None else "missing"
         if state is not None and state.state not in UNAVAILABLE_STATES:
             _LOGGER.debug(
-                "%s is available after ~%.1fs (%d extra reload(s))",
+                "%s is available after ~%.1fs (%d extra reload(s)); state=%s",
                 entity_id,
                 _monotonic() - started,
                 reloads,
+                last_seen_state,
             )
             return
         now = _monotonic()
         if now - started >= timeout:
             break
+        if now - last_progress_log >= PLAY_ONLINE_PROGRESS_LOG_INTERVAL_SECONDS:
+            # INFO, not DEBUG: makes a slow or failed wake-up visible without
+            # needing debug logging enabled ahead of time.
+            _LOGGER.info(
+                "Still waiting for %s to come online (%.0fs elapsed of %gs, "
+                "state=%s, %d reload(s) so far)",
+                entity_id,
+                now - started,
+                timeout,
+                last_seen_state,
+                reloads,
+            )
+            last_progress_log = now
         if reload_interval > 0 and now - last_reload >= reload_interval:
             reloads += 1
             _LOGGER.debug(
@@ -321,8 +339,10 @@ async def _async_wait_until_available(
 
     message = (
         f"{entity_id} did not become available within {timeout:g}s after being "
-        "turned on, so the YouTube launch command was not sent. Check that ADB "
-        "debugging is enabled on the TV, or increase the online timeout."
+        f"turned on (last seen state: {last_seen_state}, {reloads} extra reload(s) "
+        "attempted), so the YouTube launch command was not sent. If the TV normally "
+        "takes longer than this to finish booting, increase the online timeout; "
+        "otherwise check that ADB debugging is enabled on the TV."
     )
     _LOGGER.error(message)
     raise HomeAssistantError(message)

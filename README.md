@@ -101,7 +101,7 @@ If you chose **Play directly on a media player entity**:
 | **Entity to use for turning on the TV** | Optional entity that powers the TV on. A `button` / `input_button` is **pressed**; anything else (switch, plug, script…) is turned on. The media player above is only used as the ADB target. If you leave this empty the media player itself is asked to turn on, which only works while it is available. If this entity is missing or unavailable, the launch is aborted with an error instead of being silently skipped |
 | **Volume to set before playing** | 0–100%, default 30% |
 | **Wake-up delay** | Seconds to wait after turning the TV on, before reloading the Android TV integration. Default 5 s |
-| **Online timeout** | Max seconds to wait, after the reload, for the media player to become available again. Some TVs need 20 s+ after power-on before ADB accepts connections. Default 60 s. If it's exceeded, the launch command is *not* sent and an error is logged |
+| **Online timeout** | Max seconds to wait, after the reload, for the media player to become available again. Some TVs need 20 s+ after power-on before ADB accepts connections. Default 90 s. If it's exceeded, the launch command is *not* sent and an error is logged |
 | **Reload retry interval** | While waiting for the media player to come online, reload the Android TV entry again every this many seconds. Home Assistant's own retries back off (5 s, 10 s, 20 s, 40 s…), so this detects a ready TV much sooner. Default 5 s, 0 disables |
 | **Settle delay** | Seconds to wait after the reload, before the launch command is sent. Default 3 s |
 
@@ -303,6 +303,17 @@ videos** option (script or Android TV) — see
 
 ## Troubleshooting
 
+- **Playback times out but the TV is available moments later**: this can be
+  a genuinely slow boot (TV still loading apps / the ADB server starting
+  late) rather than a bug — the online timeout is a hard cutoff, and some
+  TVs are simply slower on some boots than others (cold boot, network
+  conditions, etc). Since v1.5.6 the log reports progress every 10 s at
+  INFO level while waiting (no need to enable debug logging first), e.g.
+  `Still waiting for media_player.x to come online (20s elapsed of 90s,
+  state=unavailable, 2 reload(s) so far)`, and the final timeout error
+  reports the entity's last seen state and how many reloads were
+  attempted. If you see it consistently needing more than the default 90 s,
+  raise the online timeout to match.
 - **"Custom element doesn't exist: youtube-playlist-card" that clears up on
   its own**: since v1.5.5 the card is registered as a proper Lovelace
   resource (Settings → Dashboards → Resources), not injected as an extra

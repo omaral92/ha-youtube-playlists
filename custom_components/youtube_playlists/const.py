@@ -46,11 +46,14 @@ DEFAULT_PLAY_VOLUME_PERCENT = 30
 #   5. send the ADB YouTube launch command
 DEFAULT_PLAY_WAKE_DELAY_SECONDS = 5
 DEFAULT_PLAY_SETTLE_DELAY_SECONDS = 3
-DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS = 60
+DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS = 90
 DEFAULT_PLAY_RELOAD_INTERVAL_SECONDS = 5
 MAX_PLAY_DELAY_SECONDS = 60
 MAX_PLAY_ONLINE_TIMEOUT_SECONDS = 180
 PLAY_ONLINE_POLL_INTERVAL_SECONDS = 1
+# How often to log progress at INFO level while waiting, so a slow/failed
+# wake-up is visible without needing debug logging enabled.
+PLAY_ONLINE_PROGRESS_LOG_INTERVAL_SECONDS = 10
 OFF_STATES = ("off", "unavailable", "unknown", "standby")
 # States meaning the entity cannot accept service calls yet.
 UNAVAILABLE_STATES = ("unavailable", "unknown")

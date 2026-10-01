@@ -91,6 +91,20 @@ def _sleeps(events):
     return [e[1] for e in events if e[0] == "sleep"]
 
 
+def _patch_log(monkeypatch):
+    """Capture play.py's _LOGGER.info/.error calls as (level, message) tuples."""
+    records: list[tuple[str, str]] = []
+    import custom_components.youtube_playlists.play as play_module
+
+    for level in ("info", "error"):
+        def _make(level=level):
+            def _log(msg, *args, **kwargs):
+                records.append((level, msg % args if args else msg))
+            return _log
+        monkeypatch.setattr(play_module._LOGGER, level, _make())
+    return records
+
+
 @pytest.mark.asyncio
 async def test_wake_sequence_runs_in_order(monkeypatch) -> None:
     """off -> turn on, wait, reload, (online), settle, volume, ADB launch."""
@@ -332,3 +346,43 @@ async def test_failing_button_press_is_raised(monkeypatch) -> None:
 
     with pytest.raises(HomeAssistantError, match="device unreachable"):
         await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+
+@pytest.mark.asyncio
+async def test_timeout_message_reports_last_state_and_reload_count(monkeypatch) -> None:
+    """The error should say what the entity's state actually was, not just "no"."""
+    hass, entry, registry, events, sleep = _build(
+        "off",
+        {CONF_PLAY_ONLINE_TIMEOUT: 10, CONF_PLAY_SETTLE_DELAY: 0},
+        unavailable_polls=None,
+    )
+    _patch(monkeypatch, registry, sleep)
+    log = _patch_log(monkeypatch)
+
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    assert "last seen state: unavailable" in str(exc_info.value)
+    assert "reload(s) attempted" in str(exc_info.value)
+    errors = [m for level, m in log if level == "error"]
+    assert errors and "unavailable" in errors[0]
+
+
+@pytest.mark.asyncio
+async def test_progress_is_logged_at_info_without_debug_enabled(monkeypatch) -> None:
+    """A slow wake-up must be visible at INFO level, not just DEBUG."""
+    hass, entry, registry, events, sleep = _build(
+        "off",
+        {CONF_PLAY_ONLINE_TIMEOUT: 25, "play_reload_interval": 0},
+        unavailable_polls=None,
+    )
+    _patch(monkeypatch, registry, sleep)
+    log = _patch_log(monkeypatch)
+
+    with pytest.raises(HomeAssistantError):
+        await async_play_on_media_player(hass, entry, MEDIA_PLAYER, "abc123xyz")
+
+    progress = [m for level, m in log if level == "info" and "Still waiting" in m]
+    # 25s timeout, logged every 10s -> at ~10s and ~20s.
+    assert len(progress) == 2
+    assert "state=unavailable" in progress[0]
