@@ -160,7 +160,9 @@ columns: 3
 
 | Option | Default | Description |
 |---|---|---|
-| `columns` | `3` | Grid columns |
+| `theme` | `classic` | `classic` follows your Home Assistant theme; `lumina` is a dark card with playlist tabs — see [Lumina theme](#lumina-theme) |
+| `columns` | `3` (`2` with `theme: lumina`) | Grid columns |
+| `player_entity` | *(none)* | A `media_player` whose current video is marked as playing/paused on its thumbnail |
 | `show_playlist_title` | `true` | Show/hide each playlist's heading (non-collapsible mode) |
 | `collapsible_playlists` | `false` | Make each playlist collapsible using an expand/collapse panel |
 | `playlist_background` | `true` | Set `false` to make the collapsible panel/header transparent instead of using the card background |
@@ -172,6 +174,31 @@ columns: 3
 | `sort` | `default` | Playlist order — see below |
 | `playlist_order` | `[]` | Explicit order, used when `sort: custom` |
 | `playlist` | *(all)* | Restrict the card to specific playlists, by ID or exact title |
+
+### Lumina theme
+
+```yaml
+type: custom:youtube-playlist-card
+theme: lumina
+player_entity: media_player.living_room_tv
+height: 640px
+```
+
+A dark card that matches the Lumina tablet
+dashboard: a header with what's playing, one tab per playlist (the last one
+you opened is remembered on that device), and a scrolling grid of rounded
+thumbnails. The playing video gets an accent ring and an animated
+"Playing" badge, and its playlist's tab gets a dot.
+
+| Option | Default | Description |
+|---|---|---|
+| `title` | `YouTube` | Header title |
+| `height` | *(container)* | Caps the card's height and scrolls the grid. The card fills its container's height, so inside a fixed-height layout you can leave this out |
+
+`playlist_icons` show on the tabs; `collapsible_playlists`,
+`show_playlist_title`, `playlist_background` and `icon` only apply to the
+classic theme. Load the DM Sans and Sora Google fonts as a CSS resource for
+the full look; without them it falls back to the system font.
 
 ### Selecting playlists
 
@@ -327,10 +354,11 @@ videos** option (script or Android TV) — see
   that means your Lovelace is in YAML resource mode, and you'll need to add
   the resource line manually as shown in the log warning.
 - **Card changes don't seem to apply**: the browser caches the card's JS by
-  URL. The integration auto-versions the resource using the installed
-  version (`manifest.json`), so bumping the version string after editing
-  the card, then hard-refreshing (Ctrl+Shift+R), is required to see
-  changes — a Home Assistant restart alone does not clear browser cache.
+  URL. The integration versions the resource URL with the installed
+  version (`manifest.json`) and, since v1.6.0, rewrites an existing
+  resource's `?v=` on startup when the version changes (before that it kept
+  the first version it registered). So after editing the card, bump the
+  version, restart Home Assistant, then hard-refresh (Ctrl+Shift+R).
 - **Leftover duplicate resource**: if you previously registered the card
   manually under Settings → Dashboards → Resources (e.g. pointing at
   `/local/youtube-playlist-card.js`), remove that entry now that the

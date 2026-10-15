@@ -127,11 +127,22 @@ async def _async_register_lovelace_resource(hass: HomeAssistant, card_url: str) 
         await resources.async_get_info()
 
         prefix = card_url.split("?", 1)[0]
-        already_present = any(
-            item.get("url", "").split("?", 1)[0] == prefix
-            for item in resources.async_items() or []
+        existing = next(
+            (
+                item
+                for item in resources.async_items() or []
+                if item.get("url", "").split("?", 1)[0] == prefix
+            ),
+            None,
         )
-        if already_present:
+        if existing is not None:
+            # Same file, older ?v=: point it at this version so browsers drop
+            # their cached copy of the previous card.
+            if existing.get("url") != card_url:
+                await resources.async_update_item(
+                    existing["id"], {"res_type": "module", "url": card_url}
+                )
+                _LOGGER.debug("Updated Lovelace resource to %s", card_url)
             return True
 
         await resources.async_create_item({"res_type": "module", "url": card_url})

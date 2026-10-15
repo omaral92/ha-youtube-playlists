@@ -27,6 +27,7 @@ class FakeResourceStorageCollection:
         self._fail_create = fail_create
         self.get_info_called = False
         self.created: list[dict] = []
+        self.updated: list[tuple[str, dict]] = []
 
     async def async_get_info(self):
         self.get_info_called = True
@@ -34,6 +35,12 @@ class FakeResourceStorageCollection:
 
     def async_items(self):
         return self._items
+
+    async def async_update_item(self, item_id: str, data: dict):
+        item = next(i for i in self._items if i["id"] == item_id)
+        item.update(url=data["url"], type=data["res_type"])
+        self.updated.append((item_id, data))
+        return item
 
     async def async_create_item(self, data: dict):
         if self._fail_create:
@@ -73,9 +80,9 @@ async def test_registers_resource_when_absent(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_no_duplicate_when_already_registered(monkeypatch) -> None:
-    """A previous install's resource (even with a different ?v=) is left alone."""
+    """The current version's resource is left alone."""
     _install_fake_resources_module(FakeResourceStorageCollection)
-    existing = [{"id": "id1", "res_type": "module", "url": CARD_URL.split("?")[0] + "?v=1.4.0"}]
+    existing = [{"id": "id1", "type": "module", "url": CARD_URL}]
     collection = FakeResourceStorageCollection(items=existing)
     hass = MagicMock()
     hass.data = {"lovelace": MagicMock(resources=collection)}
@@ -84,7 +91,24 @@ async def test_no_duplicate_when_already_registered(monkeypatch) -> None:
 
     assert result is True
     assert collection.created == []  # nothing new created
-    assert collection.async_items() == existing  # untouched
+    assert collection.updated == []  # and nothing rewritten
+
+
+@pytest.mark.asyncio
+async def test_updates_version_of_existing_resource(monkeypatch) -> None:
+    """A previous install's resource gets the new ?v=, instead of a duplicate."""
+    _install_fake_resources_module(FakeResourceStorageCollection)
+    existing = [{"id": "id1", "type": "module", "url": CARD_URL.split("?")[0] + "?v=1.4.0"}]
+    collection = FakeResourceStorageCollection(items=existing)
+    hass = MagicMock()
+    hass.data = {"lovelace": MagicMock(resources=collection)}
+
+    result = await _async_register_lovelace_resource(hass, CARD_URL)
+
+    assert result is True
+    assert collection.created == []
+    assert collection.updated == [("id1", {"res_type": "module", "url": CARD_URL})]
+    assert collection.async_items()[0]["url"] == CARD_URL
 
 
 @pytest.mark.asyncio
