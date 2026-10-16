@@ -20,21 +20,19 @@ from .const import (
     CONF_PLAY_SCRIPT,
     CONF_PLAY_TARGET_MODE,
     CONF_PLAY_ONLINE_TIMEOUT,
-    CONF_PLAY_RELOAD_INTERVAL,
     CONF_PLAY_SETTLE_DELAY,
     CONF_PLAY_VOLUME,
-    CONF_PLAY_WAKE_DELAY,
+    CONF_PLAY_VOLUME_ENTITY,
     CONF_PLAYLIST_FILTER_MODE,
     CONF_PLAYLIST_PATTERN,
     DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS,
-    DEFAULT_PLAY_RELOAD_INTERVAL_SECONDS,
     DEFAULT_PLAY_SETTLE_DELAY_SECONDS,
     DEFAULT_PLAY_VOLUME_PERCENT,
-    DEFAULT_PLAY_WAKE_DELAY_SECONDS,
     DEFAULT_PLAYLIST_PATTERN,
     DOMAIN,
     FILTER_MODE_ALL,
     FILTER_MODE_PATTERN,
+    LEGACY_PLAY_OPTIONS,
     MAX_PLAY_DELAY_SECONDS,
     MAX_PLAY_ONLINE_TIMEOUT_SECONDS,
     PLAY_TARGET_MEDIA_PLAYER,
@@ -177,10 +175,11 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                 self._data.pop(CONF_PLAY_MEDIA_PLAYER, None)
                 self._data.pop(CONF_PLAY_POWER_ON_ENTITY, None)
                 self._data.pop(CONF_PLAY_VOLUME, None)
-                self._data.pop(CONF_PLAY_WAKE_DELAY, None)
+                self._data.pop(CONF_PLAY_VOLUME_ENTITY, None)
                 self._data.pop(CONF_PLAY_SETTLE_DELAY, None)
                 self._data.pop(CONF_PLAY_ONLINE_TIMEOUT, None)
-                self._data.pop(CONF_PLAY_RELOAD_INTERVAL, None)
+                for key in LEGACY_PLAY_OPTIONS:
+                    self._data.pop(key, None)
                 return self.async_create_entry(data=self._data)
 
         current_script = self.config_entry.options.get(CONF_PLAY_SCRIPT)
@@ -216,6 +215,8 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
             else:
                 self._data.update(user_input)
                 self._data.pop(CONF_PLAY_SCRIPT, None)
+                for key in LEGACY_PLAY_OPTIONS:
+                    self._data.pop(key, None)
                 return self.async_create_entry(data=self._data)
 
         current = {
@@ -228,17 +229,14 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
             CONF_PLAY_VOLUME: self.config_entry.options.get(
                 CONF_PLAY_VOLUME, DEFAULT_PLAY_VOLUME_PERCENT
             ),
-            CONF_PLAY_WAKE_DELAY: self.config_entry.options.get(
-                CONF_PLAY_WAKE_DELAY, DEFAULT_PLAY_WAKE_DELAY_SECONDS
+            CONF_PLAY_VOLUME_ENTITY: self.config_entry.options.get(
+                CONF_PLAY_VOLUME_ENTITY
             ),
             CONF_PLAY_SETTLE_DELAY: self.config_entry.options.get(
                 CONF_PLAY_SETTLE_DELAY, DEFAULT_PLAY_SETTLE_DELAY_SECONDS
             ),
             CONF_PLAY_ONLINE_TIMEOUT: self.config_entry.options.get(
                 CONF_PLAY_ONLINE_TIMEOUT, DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS
-            ),
-            CONF_PLAY_RELOAD_INTERVAL: self.config_entry.options.get(
-                CONF_PLAY_RELOAD_INTERVAL, DEFAULT_PLAY_RELOAD_INTERVAL_SECONDS
             ),
         }
         if user_input is not None:
@@ -271,17 +269,19 @@ class YouTubePlaylistsOptionsFlow(OptionsFlow):
                     )
                 ),
                 vol.Optional(
-                    CONF_PLAY_WAKE_DELAY, default=current[CONF_PLAY_WAKE_DELAY]
-                ): _delay_selector(),
+                    CONF_PLAY_VOLUME_ENTITY,
+                    description={
+                        "suggested_value": current[CONF_PLAY_VOLUME_ENTITY]
+                    },
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="media_player")
+                ),
                 vol.Optional(
                     CONF_PLAY_SETTLE_DELAY, default=current[CONF_PLAY_SETTLE_DELAY]
                 ): _delay_selector(),
                 vol.Optional(
                     CONF_PLAY_ONLINE_TIMEOUT, default=current[CONF_PLAY_ONLINE_TIMEOUT]
                 ): _delay_selector(MAX_PLAY_ONLINE_TIMEOUT_SECONDS),
-                vol.Optional(
-                    CONF_PLAY_RELOAD_INTERVAL, default=current[CONF_PLAY_RELOAD_INTERVAL]
-                ): _delay_selector(),
             }
         )
 

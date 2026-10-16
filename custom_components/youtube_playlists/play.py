@@ -5,26 +5,25 @@ import asyncio
 import time
 import logging
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import (
     CONF_PLAY_ONLINE_TIMEOUT,
     CONF_PLAY_POWER_ON_ENTITY,
-    CONF_PLAY_RELOAD_INTERVAL,
     CONF_PLAY_SETTLE_DELAY,
     CONF_PLAY_VOLUME,
-    CONF_PLAY_WAKE_DELAY,
+    CONF_PLAY_VOLUME_ENTITY,
     DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS,
-    DEFAULT_PLAY_RELOAD_INTERVAL_SECONDS,
-    PLAY_ONLINE_PROGRESS_LOG_INTERVAL_SECONDS,
     DEFAULT_PLAY_SETTLE_DELAY_SECONDS,
     DEFAULT_PLAY_VOLUME_PERCENT,
-    DEFAULT_PLAY_WAKE_DELAY_SECONDS,
     OFF_STATES,
-    PLAY_ONLINE_POLL_INTERVAL_SECONDS,
+    PLAY_ONLINE_NUDGE_INTERVAL_SECONDS,
+    PLAY_ONLINE_PROGRESS_LOG_INTERVAL_SECONDS,
+    PLAY_VOLUME_ENTITY_GRACE_SECONDS,
     UNAVAILABLE_STATES,
 )
 
@@ -54,33 +53,37 @@ def _youtube_intent_command(video_id: str) -> str:
 async def async_play_on_media_player(
     hass: HomeAssistant, entry: ConfigEntry, entity_id: str, video_id: str
 ) -> None:
-    """Wake the TV if needed, bring ADB online, then launch the video.
+    """Wake the TV if needed, wait for ADB to come online, then launch the video.
 
     Sequence when the TV is off:
       1. Turn on the TV
-      2. Wait ``play_wake_delay`` seconds (default 5)
-      3. Reload the Android TV / ADB config entry so the device comes online,
-         then wait until the media player entity is actually available again
-         (up to ``play_online_timeout`` seconds, default 60), reloading again
-         every ``play_reload_interval`` seconds (default 5) while it is not
-      4. Wait ``play_settle_delay`` seconds (default 3)
-      5. Send the ADB YouTube launch command
+      2. Wait for the media player to come online (see
+         ``_async_wait_until_available``), up to ``play_online_timeout``
+         seconds after the power-on (default 90). There is no fixed wait: the
+         entity is asked to reconnect over and over, and we carry on the
+         moment its state changes to something available.
+      3. Wait ``play_settle_delay`` seconds (default 3)
+      4. Set the volume and send the ADB YouTube launch command
+
+    The volume is set on ``play_volume_entity`` when configured (for example
+    the TV itself, when the Android TV device is a stick plugged into it),
+    otherwise on the playback media player. A separate volume entity is
+    waited for alongside the playback device; if it is still not on a little
+    after the device is ready (``PLAY_VOLUME_ENTITY_GRACE_SECONDS``), the
+    video starts without the volume step rather than not at all.
     """
     state = hass.states.get(entity_id)
     is_off = state is None or state.state in OFF_STATES
+    volume_percent = entry.options.get(CONF_PLAY_VOLUME, DEFAULT_PLAY_VOLUME_PERCENT)
+    volume_entity = entry.options.get(CONF_PLAY_VOLUME_ENTITY) or entity_id
+    volume_wait: asyncio.Task[bool] | None = None
 
     if is_off:
-        wake_delay = _delay_option(
-            entry, CONF_PLAY_WAKE_DELAY, DEFAULT_PLAY_WAKE_DELAY_SECONDS
-        )
         settle_delay = _delay_option(
             entry, CONF_PLAY_SETTLE_DELAY, DEFAULT_PLAY_SETTLE_DELAY_SECONDS
         )
         online_timeout = _delay_option(
             entry, CONF_PLAY_ONLINE_TIMEOUT, DEFAULT_PLAY_ONLINE_TIMEOUT_SECONDS
-        )
-        reload_interval = _delay_option(
-            entry, CONF_PLAY_RELOAD_INTERVAL, DEFAULT_PLAY_RELOAD_INTERVAL_SECONDS
         )
         _LOGGER.debug(
             "%s is %s, powering on the TV before playback",
@@ -89,50 +92,63 @@ async def async_play_on_media_player(
         )
 
         # 1. Turn on the TV.
+        started = _monotonic()
         await _async_turn_on_tv(hass, entry, entity_id)
         _LOGGER.info(
-            "Step 1 done: power-on triggered; waiting %ss before reloading %s",
-            wake_delay,
+            "Power-on triggered; waiting up to %gs for %s to come online",
+            online_timeout,
             entity_id,
         )
-        # 2. Give it time to boot. The entity usually cannot report online yet,
-        #    so we wait a fixed period rather than polling its state.
-        await asyncio.sleep(wake_delay)
-        # 3. Reload the Android TV / ADB entry to make the device come online.
-        _LOGGER.info("Step 3: reloading the Android TV entry for %s", entity_id)
-        await _async_reload_androidtv_entry(hass, entity_id)
-        #    The TV's ADB server can take 20s+ to start after power-on. Until
-        #    the entity is available, HA silently drops service calls to it,
-        #    so wait for it here instead of firing commands into the void.
-        await _async_wait_until_available(
-            hass, entity_id, online_timeout, reload_interval
-        )
+        remaining = online_timeout - (_monotonic() - started)
+        if volume_percent is not None and volume_entity != entity_id:
+            # The TV's own entity (e.g. webOS) comes online on its own
+            # schedule; wait for it in parallel. It must be on, not just
+            # reachable, to take a volume change.
+            volume_wait = asyncio.create_task(
+                _async_wait_until_available(
+                    hass, volume_entity, remaining, not_ready=OFF_STATES, required=False
+                )
+            )
+        # 2. Until the entity is available, HA silently drops service calls to
+        #    it, so wait for it here instead of firing commands into the void.
+        try:
+            await _async_wait_until_available(hass, entity_id, remaining)
+        except BaseException:
+            if volume_wait is not None:
+                volume_wait.cancel()
+            raise
         _LOGGER.info(
-            "%s is online; settling %ss before the launch command",
+            "%s is online %.1fs after power-on; settling %ss before the launch command",
             entity_id,
+            _monotonic() - started,
             settle_delay,
         )
-        # 4. Brief settle period once the device is online.
+        # 3. Brief settle period once the device is online.
         await asyncio.sleep(settle_delay)
     else:
         _LOGGER.debug(
             "%s is %s (not off), skipping power-on", entity_id, state.state
         )
 
-    volume_percent = entry.options.get(CONF_PLAY_VOLUME, DEFAULT_PLAY_VOLUME_PERCENT)
-    if volume_percent is not None:
+    if volume_wait is not None:
         try:
-            await hass.services.async_call(
-                "media_player",
-                "volume_set",
-                {"entity_id": entity_id, "volume_level": volume_percent / 100},
-                blocking=True,
-            )
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Could not set volume on %s: %s", entity_id, err)
+            async with asyncio.timeout(PLAY_VOLUME_ENTITY_GRACE_SECONDS):
+                await asyncio.shield(volume_wait)
+        except TimeoutError:
+            volume_wait.cancel()
 
-    # 5. Send the ADB YouTube launch command.
-    _LOGGER.info("Step 5: sending ADB launch command to %s", entity_id)
+    if volume_percent is not None:
+        await _async_set_volume(
+            hass,
+            volume_entity,
+            volume_percent,
+            # The playback device takes volume over ADB even with its screen
+            # "off"; a separate TV entity has to actually be on.
+            UNAVAILABLE_STATES if volume_entity == entity_id else OFF_STATES,
+        )
+
+    # 4. Send the ADB YouTube launch command.
+    _LOGGER.info("Sending ADB launch command to %s", entity_id)
     await hass.services.async_call(
         "androidtv",
         "adb_command",
@@ -140,6 +156,36 @@ async def async_play_on_media_player(
         blocking=True,
     )
     _LOGGER.info("ADB launch command sent to %s", entity_id)
+
+
+async def _async_set_volume(
+    hass: HomeAssistant, entity_id: str, percent: float, not_ready: tuple[str, ...]
+) -> None:
+    """Set the volume, warning (not failing) when it can't be done.
+
+    Home Assistant silently skips service calls to unavailable entities, so
+    check first to make a skipped volume change visible in the log.
+    """
+    state = hass.states.get(entity_id)
+    if state is None or state.state in not_ready:
+        _LOGGER.warning(
+            "Not setting the volume: %s is %s, so it can't take a volume change; "
+            "starting the video without it",
+            entity_id,
+            "missing" if state is None else state.state,
+        )
+        return
+    try:
+        await hass.services.async_call(
+            "media_player",
+            "volume_set",
+            {"entity_id": entity_id, "volume_level": percent / 100},
+            blocking=True,
+        )
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Could not set volume on %s: %s", entity_id, err)
+        return
+    _LOGGER.info("Volume on %s set to %g%%", entity_id, percent)
 
 
 async def _async_turn_on_tv(
@@ -241,30 +287,12 @@ async def _async_power_on_entity(hass: HomeAssistant, entity_id: str) -> None:
         )
 
 
-async def _async_reload_androidtv_entry(hass: HomeAssistant, entity_id: str) -> None:
-    """Reload the underlying Android TV config entry so ADB becomes available again."""
-    entity_registry = er.async_get(hass)
-    registry_entry = entity_registry.async_get(entity_id)
+def _androidtv_entry(hass: HomeAssistant, entity_id: str) -> ConfigEntry | None:
+    """The config entry (Android TV integration) behind the media player."""
+    registry_entry = er.async_get(hass).async_get(entity_id)
     if registry_entry is None or not registry_entry.config_entry_id:
-        _LOGGER.debug("No Android TV config entry found for %s; skipping reload", entity_id)
-        return
-
-    try:
-        await hass.config_entries.async_reload(registry_entry.config_entry_id)
-    except Exception as err:  # noqa: BLE001
-        _LOGGER.warning(
-            "Could not reload Android TV config entry %s for %s: %s",
-            registry_entry.config_entry_id,
-            entity_id,
-            err,
-        )
-        return
-
-    _LOGGER.debug(
-        "Reloaded Android TV config entry %s for %s after power-on",
-        registry_entry.config_entry_id,
-        entity_id,
-    )
+        return None
+    return hass.config_entries.async_get_entry(registry_entry.config_entry_id)
 
 
 def _monotonic() -> float:
@@ -272,19 +300,76 @@ def _monotonic() -> float:
     return time.monotonic()
 
 
+async def _async_wait_for_change(changed: asyncio.Event, timeout: float) -> None:
+    """Wait until ``changed`` is set or ``timeout`` seconds pass."""
+    try:
+        async with asyncio.timeout(timeout):
+            await changed.wait()
+    except TimeoutError:
+        pass
+
+
+async def _async_nudge(hass: HomeAssistant, entity_id: str, timeout: float) -> bool:
+    """Ask the Android TV integration to try connecting right now.
+
+    Normally the entity exists and only its ADB connection is down: the
+    Android TV media player reconnects inside its own update, so forcing an
+    update (``homeassistant.update_entity``) is an immediate connection
+    attempt that leaves the integration alone. Its own polling only does this
+    every 10s or so, and right after a reload the entity sits at "unknown"
+    until that first poll, so this also skips that wait.
+
+    Only when the Android TV entry itself is not loaded (for example it failed
+    to set up because the TV was off when Home Assistant started) is there no
+    entity to update, and the entry is reloaded instead. Reloading a loaded
+    entry would throw away a connection that is about to come up.
+
+    Returns True if it reloaded the entry.
+    """
+    entry = _androidtv_entry(hass, entity_id)
+    if entry is not None and entry.state is not ConfigEntryState.LOADED:
+        _LOGGER.debug(
+            "Android TV entry %s is %s; reloading it", entry.entry_id, entry.state
+        )
+        try:
+            await hass.config_entries.async_reload(entry.entry_id)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Reloading Android TV entry %s failed: %s", entry.entry_id, err)
+        return True
+    if hass.states.get(entity_id) is None:
+        return False  # nothing to update (yet)
+    try:
+        async with asyncio.timeout(max(timeout, 0.1)):
+            await hass.services.async_call(
+                "homeassistant",
+                "update_entity",
+                {"entity_id": entity_id},
+                blocking=True,
+            )
+    except TimeoutError:
+        pass
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("Forcing an update of %s failed: %s", entity_id, err)
+    return False
+
+
 async def _async_wait_until_available(
     hass: HomeAssistant,
     entity_id: str,
     timeout: float,
-    reload_interval: float = 0,
-) -> None:
-    """Wait for the entity to exist and be available, or raise on timeout.
+    not_ready: tuple[str, ...] = UNAVAILABLE_STATES,
+    required: bool = True,
+) -> bool:
+    """Wait for the entity to exist and leave the ``not_ready`` states.
 
-    While waiting, re-reload the Android TV entry every ``reload_interval``
-    seconds (0 disables this). Home Assistant retries a failed setup itself,
-    but with growing backoff (5s, 10s, 20s, 40s...), so a TV whose ADB server
-    came up early could otherwise sit unnoticed for a long time. A reload
-    triggers an immediate new connection attempt.
+    Returns True once it has. On timeout, raises if ``required``, otherwise
+    logs a warning and returns False.
+
+    How long a TV takes to boot varies, so instead of fixed delays this
+    nudges the entity to reconnect (see ``_async_nudge``) and, between
+    nudges, listens for its state changes, returning as soon as it is
+    available - whether our nudge or Home Assistant's own polling got it
+    there.
 
     Home Assistant does not raise when a service call targets an unavailable
     entity - it logs "Referenced entities ... are missing or not currently
@@ -292,57 +377,79 @@ async def _async_wait_until_available(
     instead of the launch command being silently dropped.
     """
     started = _monotonic()
-    last_reload = started
+    deadline = started + timeout
     last_progress_log = started
-    reloads = 0
+    nudges = reloads = 0
     last_seen_state = "missing"
-    while True:
-        state = hass.states.get(entity_id)
-        last_seen_state = state.state if state is not None else "missing"
-        if state is not None and state.state not in UNAVAILABLE_STATES:
-            _LOGGER.debug(
-                "%s is available after ~%.1fs (%d extra reload(s)); state=%s",
-                entity_id,
-                _monotonic() - started,
-                reloads,
-                last_seen_state,
-            )
-            return
-        now = _monotonic()
-        if now - started >= timeout:
-            break
-        if now - last_progress_log >= PLAY_ONLINE_PROGRESS_LOG_INTERVAL_SECONDS:
-            # INFO, not DEBUG: makes a slow or failed wake-up visible without
-            # needing debug logging enabled ahead of time.
-            _LOGGER.info(
-                "Still waiting for %s to come online (%.0fs elapsed of %gs, "
-                "state=%s, %d reload(s) so far)",
-                entity_id,
-                now - started,
-                timeout,
-                last_seen_state,
-                reloads,
-            )
-            last_progress_log = now
-        if reload_interval > 0 and now - last_reload >= reload_interval:
-            reloads += 1
-            _LOGGER.debug(
-                "%s still unavailable after %.0fs; reloading again (#%d)",
-                entity_id,
-                now - started,
-                reloads,
-            )
-            await _async_reload_androidtv_entry(hass, entity_id)
-            last_reload = _monotonic()
-            continue  # re-check right away: the reload itself may have connected
-        await asyncio.sleep(PLAY_ONLINE_POLL_INTERVAL_SECONDS)
 
+    changed = asyncio.Event()
+
+    @callback
+    def _on_change(_event) -> None:
+        changed.set()
+
+    unsub = async_track_state_change_event(hass, [entity_id], _on_change)
+    try:
+        while True:
+            state = hass.states.get(entity_id)
+            last_seen_state = state.state if state is not None else "missing"
+            if state is not None and state.state not in not_ready:
+                _LOGGER.debug(
+                    "%s is available after %.1fs (%d nudge(s), %d reload(s)); state=%s",
+                    entity_id,
+                    _monotonic() - started,
+                    nudges,
+                    reloads,
+                    last_seen_state,
+                )
+                return True
+            now = _monotonic()
+            if now >= deadline:
+                break
+            if now - last_progress_log >= PLAY_ONLINE_PROGRESS_LOG_INTERVAL_SECONDS:
+                # INFO, not DEBUG: makes a slow or failed wake-up visible
+                # without needing debug logging enabled ahead of time.
+                _LOGGER.info(
+                    "Still waiting for %s to come online (%.0fs elapsed, "
+                    "state=%s, %d connection attempt(s), %d reload(s))",
+                    entity_id,
+                    now - started,
+                    last_seen_state,
+                    nudges,
+                    reloads,
+                )
+                last_progress_log = now
+
+            changed.clear()
+            if await _async_nudge(hass, entity_id, deadline - now):
+                reloads += 1
+            else:
+                nudges += 1
+            if changed.is_set():
+                continue  # the nudge itself changed the state: check it now
+            # Pause briefly before the next attempt, but wake up the moment
+            # the state changes.
+            await _async_wait_for_change(
+                changed,
+                max(0.0, min(PLAY_ONLINE_NUDGE_INTERVAL_SECONDS, deadline - _monotonic())),
+            )
+    finally:
+        unsub()
+
+    if not required:
+        _LOGGER.warning(
+            "%s did not come on within %.0fs (last seen state: %s)",
+            entity_id,
+            timeout,
+            last_seen_state,
+        )
+        return False
     message = (
-        f"{entity_id} did not become available within {timeout:g}s after being "
-        f"turned on (last seen state: {last_seen_state}, {reloads} extra reload(s) "
-        "attempted), so the YouTube launch command was not sent. If the TV normally "
-        "takes longer than this to finish booting, increase the online timeout; "
-        "otherwise check that ADB debugging is enabled on the TV."
+        f"{entity_id} did not come online within {timeout:.0f}s of the TV being "
+        f"turned on (last seen state: {last_seen_state}, {nudges} connection "
+        f"attempt(s), {reloads} reload(s)), so the YouTube launch command was not "
+        "sent. If the TV normally takes longer than this to boot, increase the "
+        "online timeout; otherwise check that ADB debugging is enabled on the TV."
     )
     _LOGGER.error(message)
     raise HomeAssistantError(message)

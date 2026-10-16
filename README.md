@@ -100,10 +100,9 @@ If you chose **Play directly on a media player entity**:
 | **Media player (Android TV only)** | Required. Only Android TV entities set up via the Android TV (ADB) integration are supported |
 | **Entity to use for turning on the TV** | Optional entity that powers the TV on. A `button` / `input_button` is **pressed**; anything else (switch, plug, script…) is turned on. The media player above is only used as the ADB target. If you leave this empty the media player itself is asked to turn on, which only works while it is available. If this entity is missing or unavailable, the launch is aborted with an error instead of being silently skipped |
 | **Volume to set before playing** | 0–100%, default 30% |
-| **Wake-up delay** | Seconds to wait after turning the TV on, before reloading the Android TV integration. Default 5 s |
-| **Online timeout** | Max seconds to wait, after the reload, for the media player to become available again. Some TVs need 20 s+ after power-on before ADB accepts connections. Default 90 s. If it's exceeded, the launch command is *not* sent and an error is logged |
-| **Reload retry interval** | While waiting for the media player to come online, reload the Android TV entry again every this many seconds. Home Assistant's own retries back off (5 s, 10 s, 20 s, 40 s…), so this detects a ready TV much sooner. Default 5 s, 0 disables |
-| **Settle delay** | Seconds to wait after the reload, before the launch command is sent. Default 3 s |
+| **Media player to set the volume on** | Optional. Where that volume goes, e.g. your TV's own entity (LG webOS, Samsung…) when the Android TV device is a stick plugged into it. Empty = the media player above. If the TV is off, it's waited for alongside the stick; if it still isn't on 15 s after the stick is ready, the video starts without the volume change (and a warning is logged) |
+| **Online timeout** | Max seconds, counted from turning the TV on, for the media player to come online. It's only a safety cutoff: playback starts as soon as the TV is up, however long that takes. Some TVs need 30 s+ after power-on before ADB accepts connections. Default 90 s. If it's exceeded, the launch command is *not* sent and an error is logged |
+| **Settle delay** | Seconds to wait once the media player is online, before the launch command is sent. Default 3 s |
 
 Changing any option reloads the integration automatically — no restart
 needed. Switching between script/media player modes only asks for the
@@ -131,16 +130,21 @@ integration's own `youtube_playlists.play_video` service, which:
 If the TV is off:
 
 1. Turns the TV on
-2. Waits for the **wake-up delay** (default 5 s)
-3. Reloads the Android TV / ADB integration, then waits until the media
-   player is actually available again (up to the **online timeout**, default 60 s),
-   reloading again every **reload retry interval** (default 5 s) while it isn't
-4. Waits for the **settle delay** (default 3 s)
-5. Sets the volume to your configured level, then launches the video via an
+2. Waits for the media player to come online, with no fixed delays: it
+   asks the Android TV integration to reconnect right away (a forced entity
+   update, which is how that integration reconnects), repeats that every
+   couple of seconds while the TV boots, and carries on the moment the
+   entity's state changes to available, whichever way it got there. The
+   Android TV entry is only reloaded if it isn't loaded at all (e.g. it
+   failed to set up because the TV was off when Home Assistant started).
+   Gives up after the **online timeout** (default 90 s from power-on)
+3. Waits for the **settle delay** (default 3 s)
+4. Sets the volume to your configured level (on the **media player to set
+   the volume on**, if you picked one), then launches the video via an
    ADB intent
    (`am start -a android.intent.action.VIEW -d "https://www.youtube.com/watch?v=<id>"`)
 
-If the TV is already on, steps 1–4 are skipped.
+If the TV is already on, steps 1–3 are skipped.
 
 This requires the device to already be set up in Home Assistant via the
 **Android TV** integration (the ADB-based one), with ADB debugging enabled
@@ -330,17 +334,15 @@ videos** option (script or Android TV) — see
 
 ## Troubleshooting
 
-- **Playback times out but the TV is available moments later**: this can be
-  a genuinely slow boot (TV still loading apps / the ADB server starting
-  late) rather than a bug — the online timeout is a hard cutoff, and some
-  TVs are simply slower on some boots than others (cold boot, network
-  conditions, etc). Since v1.5.6 the log reports progress every 10 s at
-  INFO level while waiting (no need to enable debug logging first), e.g.
-  `Still waiting for media_player.x to come online (20s elapsed of 90s,
-  state=unavailable, 2 reload(s) so far)`, and the final timeout error
-  reports the entity's last seen state and how many reloads were
-  attempted. If you see it consistently needing more than the default 90 s,
-  raise the online timeout to match.
+- **Playback times out but the TV is available moments later**: the online
+  timeout is a hard cutoff counted from the power-on, so it must be longer
+  than your TV's slowest boot (a Mi TV Stick takes about 30 s). There's no
+  benefit to keeping it tight: playback starts as soon as the TV is up. The
+  log reports progress every 10 s at INFO level while waiting, e.g.
+  `Still waiting for media_player.x to come online (20s elapsed,
+  state=unavailable, 9 connection attempt(s), 0 reload(s))`, and once it
+  works it logs how long it took (`... is online 31.2s after power-on`), so
+  you can see your TV's real boot time.
 - **"Custom element doesn't exist: youtube-playlist-card" that clears up on
   its own**: since v1.5.5 the card is registered as a proper Lovelace
   resource (Settings → Dashboards → Resources), not injected as an extra
